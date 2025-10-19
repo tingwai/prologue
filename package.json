@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "description": "AI-powered Chrome/Firefox extension for GitHub PR context and explanations",
   "scripts": {
-    "build": "webpack --mode production --env target=chrome",
+    "build": "npm run build:chrome && npm run build:firefox",
+    "build:chrome": "webpack --mode production --env target=chrome",
     "build:firefox": "webpack --mode production --env target=firefox",
     "dev": "webpack --mode development --watch --env target=chrome",
     "dev:firefox": "webpack --mode development --watch --env target=firefox",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist dist-chrome dist-firefox"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",

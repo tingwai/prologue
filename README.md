@@ -18,11 +18,12 @@ AI-powered Chrome/Firefox extension that provides instant context and explanatio
 # Install dependencies
 npm install
 
-# Build for Chrome
-npm run build
+# Build for BOTH Chrome AND Firefox
+npm run build            # Builds to dist-chrome/ and dist-firefox/
 
-# Build for Firefox
-npm run build:firefox
+# Or build individually
+npm run build:chrome     # Chrome only -> dist-chrome/
+npm run build:firefox    # Firefox only -> dist-firefox/
 
 # Or run in development mode with watch
 npm run dev              # Chrome
@@ -35,12 +36,12 @@ npm run dev:firefox      # Firefox
 1. Navigate to `chrome://extensions/`
 2. Enable "Developer mode" (toggle in top right)
 3. Click "Load unpacked"
-4. Select the `dist` folder
+4. Select the `dist-chrome` folder
 
 **Firefox:**
 1. Navigate to `about:debugging#/runtime/this-firefox`
 2. Click "Load Temporary Add-on"
-3. Select `dist/manifest.json`
+3. Select `dist-firefox/manifest.json`
 
 ### Configure API Key
 

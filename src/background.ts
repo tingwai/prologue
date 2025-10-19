@@ -14,7 +14,7 @@ browser.runtime.onInstalled.addListener((details) => {
 // Handle messages from content script if needed
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('[PR Context Assistant] Message received:', message);
-  return false;
+  // Return nothing (void) for sync handling
 });
 
 // Clean up old cache entries (older than 7 days)

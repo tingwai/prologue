@@ -4,8 +4,9 @@ const CopyPlugin = require('copy-webpack-plugin');
 module.exports = (env) => {
   const isFirefox = env && env.target === 'firefox';
   const manifestFile = isFirefox ? 'manifest-firefox.json' : 'manifest.json';
+  const outputDir = isFirefox ? 'dist-firefox' : 'dist-chrome';
   
-  console.log(`Building for: ${isFirefox ? 'Firefox' : 'Chrome'}`);
+  console.log(`Building for: ${isFirefox ? 'Firefox' : 'Chrome'} -> ${outputDir}`);
   
   return {
   entry: {
@@ -27,7 +28,7 @@ module.exports = (env) => {
   },
   output: {
     filename: '[name].js',
-    path: path.resolve(__dirname, 'dist'),
+    path: path.resolve(__dirname, outputDir),
     clean: true,
   },
   plugins: [
