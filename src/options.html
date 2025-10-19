@@ -163,21 +163,21 @@
     <div class="info-box">
       <h3>How it works</h3>
       <p>
-        This extension loads the entire PR into an AI agent when you open a GitHub PR page. 
+        This extension loads the entire PR diff when you open a GitHub PR page and sends it to Claude. 
         Simply select any code snippet to get instant context and explanations. 
-        Each PR is cached per commit, so subsequent selections are lightning fast.
+        Each PR is cached per commit, maintaining conversation history for context-aware responses.
       </p>
     </div>
 
     <div class="form-group">
-      <label for="apiKey">Continue API Key</label>
+      <label for="apiKey">Anthropic API Key</label>
       <input 
         type="password" 
         id="apiKey" 
-        placeholder="cont_xxxxxxxxxxxxxxxxxxxx"
+        placeholder="sk-ant-xxxxxxxxxxxxxxxxxxxx"
       >
       <div class="help-text">
-        Get your API key from <a href="https://continue.dev" target="_blank">continue.dev</a>
+        Get your API key from <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a>
       </div>
     </div>
 

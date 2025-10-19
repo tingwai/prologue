@@ -7,7 +7,8 @@
     "storage",
     "activeTab",
     "https://github.com/*",
-    "https://api.continue.dev/*"
+    "https://patch-diff.githubusercontent.com/*",
+    "https://api.anthropic.com/*"
   ],
   "background": {
     "scripts": ["background.js"]
@@ -25,6 +26,7 @@
     "open_in_tab": true
   },
   "browser_action": {
+    "default_popup": "popup.html",
     "default_title": "PR Context Assistant"
   },
   "icons": {

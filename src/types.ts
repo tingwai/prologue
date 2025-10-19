@@ -4,6 +4,7 @@ export interface PRContext {
   content: string;
   agentId: string;
   timestamp: number;
+  conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
 }
 
 export interface ContinueAgentResponse {

@@ -13,6 +13,7 @@ module.exports = (env) => {
     content: './src/content.ts',
     background: './src/background.ts',
     options: './src/options.ts',
+    popup: './src/popup.ts',
   },
   module: {
     rules: [
@@ -36,6 +37,7 @@ module.exports = (env) => {
       patterns: [
         { from: `src/${manifestFile}`, to: 'manifest.json' },
         { from: 'src/options.html', to: 'options.html' },
+        { from: 'src/popup.html', to: 'popup.html' },
         { from: 'src/styles.css', to: 'styles.css' },
       ],
     }),

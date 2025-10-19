@@ -9,7 +9,8 @@
   ],
   "host_permissions": [
     "https://github.com/*",
-    "https://api.continue.dev/*"
+    "https://patch-diff.githubusercontent.com/*",
+    "https://api.anthropic.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -27,6 +28,7 @@
     "open_in_tab": true
   },
   "action": {
+    "default_popup": "popup.html",
     "default_title": "PR Context Assistant"
   },
   "icons": {

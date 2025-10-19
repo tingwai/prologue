@@ -1,19 +1,47 @@
 import browser from 'webextension-polyfill';
 import type { PRContext, TooltipPosition } from './types';
 
+interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 class PRContextAssistant {
   private tooltip: HTMLElement | null = null;
   private prContext: PRContext | null = null;
+  private conversationHistory: ConversationMessage[] = [];
   private isLoading = false;
 
   constructor() {
     this.init();
+    this.setupNavigationListener();
   }
 
   private async init() {
     await this.loadPRContext();
     this.setupSelectionListener();
     console.log('[PR Context Assistant] Initialized');
+  }
+
+  private setupNavigationListener() {
+    // Listen for URL changes (GitHub uses pushState for navigation)
+    let lastUrl = location.href;
+    new MutationObserver(() => {
+      const url = location.href;
+      if (url !== lastUrl) {
+        console.log('[PR Context Assistant] URL changed from', lastUrl, 'to', url);
+        lastUrl = url;
+        
+        // Check if we're still on a PR page
+        if (this.extractPRInfo(url)) {
+          console.log('[PR Context Assistant] Navigated to different PR, reloading context');
+          this.prContext = null;
+          this.conversationHistory = [];
+          this.hideTooltip();
+          this.loadPRContext();
+        }
+      }
+    }).observe(document, { subtree: true, childList: true });
   }
 
   private async loadPRContext() {
@@ -25,27 +53,65 @@ class PRContextAssistant {
     const cached = await browser.storage.local.get(cacheKey);
     if (cached[cacheKey]) {
       this.prContext = cached[cacheKey];
+      this.conversationHistory = cached[cacheKey].conversationHistory || [];
       console.log('[PR Context Assistant] Loaded from cache');
       return;
     }
 
-    // Fetch PR content and send to AI
-    const prContent = this.extractPRContent();
     const apiKey = await this.getApiKey();
-
     if (!apiKey) {
       console.warn('[PR Context Assistant] No API key set. Please configure in extension options.');
       return;
     }
 
     try {
-      const agentId = await this.initializeAgent(prContent, prUrl, apiKey);
+      // Extract PR info to get diff URL
+      const prInfo = this.extractPRInfo(prUrl);
+      if (!prInfo) {
+        console.error('[PR Context Assistant] Could not extract PR info');
+        return;
+      }
+
+      // Fetch the raw diff from GitHub
+      const diffUrl = `https://patch-diff.githubusercontent.com/raw/${prInfo.owner}/${prInfo.repo}/pull/${prInfo.number}.diff`;
+      console.log('[PR Context Assistant] Fetching diff from:', diffUrl);
+
+      const diffResponse = await fetch(diffUrl);
+      if (!diffResponse.ok) {
+        throw new Error(`Failed to fetch diff: ${diffResponse.statusText}`);
+      }
+
+      const diffContent = await diffResponse.text();
+      console.log('[PR Context Assistant] Diff fetched, length:', diffContent.length);
+
+      // Initialize conversation with Claude
+      const systemPrompt = `You are a helpful AI code review assistant. You have been provided with the complete diff of a GitHub Pull Request. Your role is to:
+
+1. Help reviewers understand specific code snippets they select
+2. Explain what the code does technically
+3. Provide context about how it fits into the PR changes
+4. Keep responses concise and focused
+5. Respond in short concise bullet points
+
+Here is the full PR diff:
+
+${diffContent}
+
+When the user selects code snippets, provide helpful, contextual explanations.`;
+
+      // Send initial message to Claude
+      this.conversationHistory = [
+        { role: 'user', content: systemPrompt },
+        { role: 'assistant', content: 'I\'ve reviewed the PR diff and I\'m ready to help explain code snippets. Please select any code you\'d like me to explain.' }
+      ];
+
       this.prContext = {
         url: prUrl,
         commit,
-        content: prContent,
-        agentId,
+        content: diffContent,
+        agentId: '', // Not used with Anthropic
         timestamp: Date.now(),
+        conversationHistory: this.conversationHistory
       };
 
       // Cache the context
@@ -66,94 +132,54 @@ class PRContextAssistant {
     return 'latest';
   }
 
-  private extractPRContent(): string {
-    // Extract PR title, description, and diff content
-    const title = document.querySelector('.js-issue-title')?.textContent?.trim() || '';
-    const description = document.querySelector('.comment-body')?.textContent?.trim() || '';
-    
-    // Get all file diffs
-    const diffContainers = document.querySelectorAll('.file');
-    let diffContent = '';
-    
-    diffContainers.forEach((container) => {
-      const fileName = container.querySelector('.file-info a')?.textContent?.trim() || '';
-      const diffLines = container.querySelectorAll('.blob-code');
-      const fileContent = Array.from(diffLines)
-        .map((line) => line.textContent?.trim())
-        .join('\n');
-      
-      diffContent += `\n\n### File: ${fileName}\n${fileContent}`;
-    });
+  private extractPRInfo(prUrl: string): { owner: string; repo: string; number: string } | null {
+    // Extract owner, repo, and PR number from URL
+    // https://github.com/owner/repo/pull/123
+    const match = prUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/);
+    if (!match) return null;
 
-    return `# PR: ${title}\n\n## Description\n${description}\n\n## Changes\n${diffContent}`;
-  }
-
-  private async initializeAgent(prContent: string, repoUrl: string, apiKey: string): Promise<string> {
-    const prompt = `You are a code review assistant. You have been given the full context of a GitHub Pull Request. Your job is to provide concise, helpful explanations when asked about specific code selections.
-
-Here is the full PR content:
-
-${prContent}
-
-When asked about specific code snippets, explain:
-1. What the code does technically
-2. How it fits into the changes in this PR
-3. Any potential concerns or notable patterns
-
-Keep responses brief and focused. This is a quick reference tool for reviewers.`;
-
-    const createAgentBody = {
-      repoUrl: this.extractRepoUrl(repoUrl),
-      name: `pr-context-${Date.now()}`,
-      prompt,
-      agent: "continuedev/default-background-agent",
-      idempotencyKey: `${repoUrl}-${Date.now()}`,
+    return {
+      owner: match[1],
+      repo: match[2],
+      number: match[3]
     };
-
-    const response = await fetch("https://api.continue.dev/agents", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(createAgentBody),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to create agent: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.id;
   }
 
-  private extractRepoUrl(prUrl: string): string {
-    // Convert PR URL to repo URL
-    // https://github.com/owner/repo/pull/123 -> https://github.com/owner/repo
-    const match = prUrl.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)/);
-    return match ? `${match[0]}` : prUrl;
-  }
+
 
   private async getApiKey(): Promise<string | null> {
-    const result = await browser.storage.sync.get('continueApiKey');
-    return result.continueApiKey || null;
+    const result = await browser.storage.sync.get('anthropicApiKey');
+    return result.anthropicApiKey || null;
   }
 
   private setupSelectionListener() {
+    console.log('[PR Context Assistant] Setting up selection listener');
     document.addEventListener('mouseup', async (event) => {
+      console.log('[PR Context Assistant] Mouseup detected!');
+
+      // Ignore if selection is inside the tooltip
+      const target = event.target as HTMLElement;
+      if (this.tooltip && this.tooltip.contains(target)) {
+        console.log('[PR Context Assistant] Selection inside tooltip, ignoring');
+        return;
+      }
+
       // Small delay to ensure selection is complete
       setTimeout(async () => {
         const selection = window.getSelection();
         const selectedText = selection?.toString().trim();
+        console.log('[PR Context Assistant] Selection:', { text: selectedText, length: selectedText?.length });
 
         if (!selectedText || selectedText.length < 5) {
+          console.log('[PR Context Assistant] Selection too short, hiding tooltip');
           this.hideTooltip();
           return;
         }
 
         // Only trigger on code areas
-        const target = event.target as HTMLElement;
-        if (!this.isCodeArea(target)) {
+        const isCode = this.isCodeArea(target);
+        console.log('[PR Context Assistant] isCodeArea:', isCode, 'target:', target);
+        if (!isCode) {
           this.hideTooltip();
           return;
         }
@@ -164,15 +190,16 @@ Keep responses brief and focused. This is a quick reference tool for reviewers.`
           x: rect.left + rect.width / 2,
           y: rect.top - 10,
         };
+        console.log('[PR Context Assistant] Showing explanation at', position);
 
         await this.showExplanation(selectedText, position);
       }, 10);
     });
 
-    // Hide tooltip on scroll or click outside
-    document.addEventListener('scroll', () => this.hideTooltip(), true);
+    // Hide tooltip on click outside (not on scroll)
     document.addEventListener('mousedown', (event) => {
-      if (this.tooltip && !this.tooltip.contains(event.target as Node)) {
+      const target = event.target as HTMLElement;
+      if (this.tooltip && !this.tooltip.contains(target) && !this.isCodeArea(target)) {
         this.hideTooltip();
       }
     });
@@ -180,11 +207,24 @@ Keep responses brief and focused. This is a quick reference tool for reviewers.`
 
   private isCodeArea(element: HTMLElement): boolean {
     // Check if selection is within code diff area
-    return !!(
+    const isCode = !!(
       element.closest('.blob-code') ||
       element.closest('.file') ||
-      element.closest('.diff-view')
+      element.closest('.diff-view') ||
+      element.closest('.blob-wrapper') ||
+      element.closest('.diff-text-inner') ||
+      element.closest('[data-code-marker]')
     );
+    console.log('[PR Context Assistant] isCodeArea check:', {
+      element: element.className,
+      hasBlobCode: !!element.closest('.blob-code'),
+      hasFile: !!element.closest('.file'),
+      hasDiffView: !!element.closest('.diff-view'),
+      hasBlobWrapper: !!element.closest('.blob-wrapper'),
+      hasDiffTextInner: !!element.closest('.diff-text-inner'),
+      result: isCode
+    });
+    return isCode;
   }
 
   private async showExplanation(selectedText: string, position: TooltipPosition) {
@@ -211,24 +251,49 @@ Keep responses brief and focused. This is a quick reference tool for reviewers.`
   }
 
   private async queryAgent(selectedText: string, apiKey: string): Promise<string> {
-    const queryPrompt = `Explain this code snippet concisely:\n\n\`\`\`\n${selectedText}\n\`\`\`\n\nProvide a brief explanation covering what it does and its role in this PR.`;
+    const queryPrompt = `Explain this code snippet:\n\n\`\`\`\n${selectedText}\n\`\`\`\n\nProvide a brief explanation (2-4 sentences) covering what it does and its role in this PR.`;
 
-    // Query the existing agent
-    const response = await fetch(`https://api.continue.dev/agents/${this.prContext!.agentId}/query`, {
-      method: "POST",
+    console.log('[PR Context Assistant] Querying Claude');
+    console.log('[PR Context Assistant] Current conversation history length:', this.conversationHistory.length);
+
+    // Only keep first 2 messages (system prompt + assistant acknowledgment)
+    // Always replace the user query (3rd message if it exists)
+    const baseHistory = this.conversationHistory.slice(0, 2);
+    const messages = [...baseHistory, { role: 'user' as const, content: queryPrompt }];
+
+    console.log('[PR Context Assistant] Sending messages length:', messages.length);
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
       },
-      body: JSON.stringify({ query: queryPrompt }),
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 1024,
+        messages: messages,
+      }),
     });
 
+    console.log('[PR Context Assistant] API response status:', response.status);
+
     if (!response.ok) {
-      throw new Error(`Agent query failed: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('[PR Context Assistant] API error:', response.status, errorText);
+      throw new Error(`Claude API failed: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
-    return data.response || data.answer || 'No explanation available.';
+    console.log('[PR Context Assistant] Claude response received');
+
+    const assistantMessage = data.content[0]?.text || 'No explanation available.';
+
+    // Don't update conversation history - keep it at just the first 2 messages
+    // Each new selection just replaces the query, doesn't append
+
+    return assistantMessage;
   }
 
   private showTooltip(content: string, position: TooltipPosition, allowCopy: boolean) {

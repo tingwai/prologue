@@ -4,12 +4,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   const apiKeyInput = document.getElementById('apiKey') as HTMLInputElement;
   const saveButton = document.getElementById('save') as HTMLButtonElement;
   const statusDiv = document.getElementById('status') as HTMLDivElement;
-  const clearCacheButton = document.getElementById('clearCache') as HTMLButtonElement;
+  const openOptionsButton = document.getElementById('openOptions') as HTMLAnchorElement;
 
   // Load saved API key
   const result = await browser.storage.sync.get('anthropicApiKey');
   if (result.anthropicApiKey) {
-    apiKeyInput.value = result.anthropicApiKey;
+    // Show masked version
+    const key = result.anthropicApiKey as string;
+    apiKeyInput.value = key.substring(0, 10) + '...' + key.substring(key.length - 4);
+    apiKeyInput.placeholder = 'API key configured';
   }
 
   // Save API key
@@ -21,14 +24,26 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
+    // Don't save if it's the masked version
+    if (apiKey.includes('...')) {
+      showStatus('API key already configured', 'success');
+      return;
+    }
+
     await browser.storage.sync.set({ anthropicApiKey: apiKey });
-    showStatus('API key saved successfully!', 'success');
+    showStatus('✓ API key saved!', 'success');
+    
+    // Mask the key after saving
+    setTimeout(() => {
+      apiKeyInput.value = apiKey.substring(0, 10) + '...' + apiKey.substring(apiKey.length - 4);
+    }, 500);
   });
 
-  // Clear cache
-  clearCacheButton.addEventListener('click', async () => {
-    await browser.storage.local.clear();
-    showStatus('Cache cleared successfully!', 'success');
+  // Open full options page
+  openOptionsButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    browser.runtime.openOptionsPage();
+    window.close();
   });
 
   function showStatus(message: string, type: 'success' | 'error') {
