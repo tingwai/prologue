@@ -11,6 +11,8 @@ class PRContextAssistant {
   private prContext: PRContext | null = null;
   private conversationHistory: ConversationMessage[] = [];
   private isLoading = false;
+  private queryTimeout: NodeJS.Timeout | null = null;
+  private activeAbortController: AbortController | null = null;
 
   constructor() {
     this.init();
@@ -85,19 +87,19 @@ class PRContextAssistant {
       console.log('[PR Context Assistant] Diff fetched, length:', diffContent.length);
 
       // Initialize conversation with Claude
-      const systemPrompt = `You are a helpful AI code review assistant. You have been provided with the complete diff of a GitHub Pull Request. Your role is to:
-
-1. Help reviewers understand specific code snippets they select
-2. Explain what the code does technically
-3. Provide context about how it fits into the PR changes
-4. Keep responses concise and focused
-5. Respond in short concise bullet points
+      const systemPrompt = `You are a code review assistant. Focus on being insightful, not verbose.
 
 Here is the full PR diff:
 
 ${diffContent}
 
-When the user selects code snippets, provide helpful, contextual explanations.`;
+When explaining code:
+- Skip obvious things (e.g., "this creates a variable", "this is a function")
+- Focus on non-obvious behavior, edge cases, gotchas, or clever patterns
+- Explain WHY code exists in this PR, not just WHAT it does
+- If code is straightforward, say so briefly
+- Be concise: 1-3 bullet points max
+- Only explain things worth mentioning`;
 
       // Send initial message to Claude
       this.conversationHistory = [
@@ -184,15 +186,32 @@ When the user selects code snippets, provide helpful, contextual explanations.`;
           return;
         }
 
-        const range = selection!.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
+        // Position tooltip at mouse cursor location
         const position = {
-          x: rect.left + rect.width / 2,
-          y: rect.top - 10,
+          x: event.clientX + window.scrollX,
+          y: event.clientY + window.scrollY,
         };
-        console.log('[PR Context Assistant] Showing explanation at', position);
+        console.log('[PR Context Assistant] Selection ready, starting 300ms timer');
 
-        await this.showExplanation(selectedText, position);
+        // Clear any existing query timeout
+        if (this.queryTimeout) {
+          console.log('[PR Context Assistant] Clearing previous timeout, restarting timer');
+          clearTimeout(this.queryTimeout);
+          this.queryTimeout = null;
+        }
+
+        // Check if context is loaded
+        if (!this.prContext) {
+          this.showTooltip('⚠️ PR context not loaded. Please refresh the page.', position, true);
+          return;
+        }
+
+        // Wait 300ms before showing tooltip and sending query (debounce for multi-clicks)
+        this.queryTimeout = setTimeout(async () => {
+          console.log('[PR Context Assistant] 300ms elapsed, showing tooltip and querying');
+          this.showTooltip('🤔 Analyzing...', position, false);
+          await this.sendExplanationQuery(selectedText, position);
+        }, 300);
       }, 10);
     });
 
@@ -227,13 +246,17 @@ When the user selects code snippets, provide helpful, contextual explanations.`;
     return isCode;
   }
 
-  private async showExplanation(selectedText: string, position: TooltipPosition) {
-    if (!this.prContext) {
-      this.showTooltip('⚠️ PR context not loaded. Please refresh the page.', position, true);
-      return;
+  private async sendExplanationQuery(selectedText: string, position: TooltipPosition) {
+    // Cancel any previous ongoing API call
+    if (this.activeAbortController) {
+      console.log('[PR Context Assistant] Aborting previous API call');
+      this.activeAbortController.abort();
+      this.activeAbortController = null;
     }
 
-    this.showTooltip('🤔 Analyzing...', position, false);
+    // Create new abort controller for this request
+    this.activeAbortController = new AbortController();
+    const signal = this.activeAbortController.signal;
 
     try {
       const apiKey = await this.getApiKey();
@@ -242,16 +265,36 @@ When the user selects code snippets, provide helpful, contextual explanations.`;
         return;
       }
 
-      const explanation = await this.queryAgent(selectedText, apiKey);
-      this.showTooltip(explanation, position, true);
-    } catch (error) {
+      const explanation = await this.queryAgent(selectedText, apiKey, signal);
+      
+      // Only show tooltip if request wasn't aborted
+      if (!signal.aborted) {
+        this.showTooltip(explanation, position, true);
+      }
+    } catch (error: any) {
+      // Don't show error if request was intentionally aborted
+      if (error.name === 'AbortError') {
+        console.log('[PR Context Assistant] Query aborted');
+        return;
+      }
       console.error('[PR Context Assistant] Query failed:', error);
       this.showTooltip('❌ Failed to get explanation. Try again.', position, true);
+    } finally {
+      // Clean up abort controller if it's still the active one
+      if (this.activeAbortController?.signal === signal) {
+        this.activeAbortController = null;
+      }
     }
   }
 
-  private async queryAgent(selectedText: string, apiKey: string): Promise<string> {
-    const queryPrompt = `Explain this code snippet:\n\n\`\`\`\n${selectedText}\n\`\`\`\n\nProvide a brief explanation (2-4 sentences) covering what it does and its role in this PR.`;
+  private async queryAgent(selectedText: string, apiKey: string, signal: AbortSignal): Promise<string> {
+    // Count lines in selection
+    const lineCount = selectedText.split('\n').length;
+    const isSingleLine = lineCount === 1;
+    
+    const queryPrompt = isSingleLine
+      ? `Explain this line:\n\n\`\`\`\n${selectedText}\n\`\`\`\n\nBe insightful, not verbose. Skip obvious details. Focus on:\n- Non-obvious behavior or gotchas\n- Why this change in the PR\n- If straightforward, just say "Straightforward: [brief]"\n\n1-3 bullet points max using • or -.`
+      : `Explain this code:\n\n\`\`\`\n${selectedText}\n\`\`\`\n\nBe insightful, not verbose. Skip obvious details. Focus on:\n- Non-obvious patterns, edge cases, or gotchas\n- Why these changes in the PR\n- If straightforward, just say "Straightforward: [brief]"\n\n1-3 bullet points max using • or -.`;
 
     console.log('[PR Context Assistant] Querying Claude');
     console.log('[PR Context Assistant] Current conversation history length:', this.conversationHistory.length);
@@ -275,6 +318,7 @@ When the user selects code snippets, provide helpful, contextual explanations.`;
         max_tokens: 1024,
         messages: messages,
       }),
+      signal: signal, // Add abort signal to fetch
     });
 
     console.log('[PR Context Assistant] API response status:', response.status);
@@ -309,22 +353,22 @@ When the user selects code snippets, provide helpful, contextual explanations.`;
 
     document.body.appendChild(this.tooltip);
 
-    // Position tooltip
+    // Position tooltip - always below cursor
     const tooltipRect = this.tooltip.getBoundingClientRect();
     let left = position.x - tooltipRect.width / 2;
-    let top = position.y - tooltipRect.height;
+    let top = position.y + 20; // Always show 20px below cursor
 
-    // Keep tooltip in viewport
+    // Always add the below class for arrow direction
+    this.tooltip.classList.add('pr-context-tooltip-below');
+
+    // Keep tooltip horizontally in viewport
     if (left < 10) left = 10;
     if (left + tooltipRect.width > window.innerWidth - 10) {
       left = window.innerWidth - tooltipRect.width - 10;
     }
-    if (top < 10) {
-      top = position.y + 20; // Show below selection if not enough space above
-    }
 
-    this.tooltip.style.left = `${left + window.scrollX}px`;
-    this.tooltip.style.top = `${top + window.scrollY}px`;
+    this.tooltip.style.left = `${left}px`;
+    this.tooltip.style.top = `${top}px`;
 
     // Add event listeners
     const closeBtn = this.tooltip.querySelector('.pr-context-close-btn');
@@ -343,10 +387,12 @@ When the user selects code snippets, provide helpful, contextual explanations.`;
   }
 
   private formatContent(content: string): string {
-    // Simple markdown-like formatting
+    // Convert markdown formatting and preserve bullet points
     return content
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\n/g, '<br>');
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
+      .replace(/^- /gm, '• ') // Convert dashes to bullets
+      .replace(/^\* /gm, '• ') // Convert asterisks to bullets
+      .replace(/\n/g, '<br>'); // Line breaks
   }
 
   private hideTooltip() {
