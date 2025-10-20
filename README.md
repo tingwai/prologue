@@ -1,6 +1,8 @@
-# PR Context Assistant
+# Prologue
 
-AI-powered Chrome/Firefox extension that provides instant context and explanations for GitHub Pull Requests using Claude AI.
+**Select. Understand. Ship faster.**
+
+Never wonder what code does again. Prologue brings Claude directly to your GitHub pull requests. Just highlight any snippet and get instant, insightful explanations without leaving the page.
 
 ## ✨ Features
 
