@@ -330,9 +330,8 @@ When explaining code:
     }
 
     const data = await response.json();
-    console.log('[PR Context Assistant] Claude response received');
-
     const assistantMessage = data.content[0]?.text || 'No explanation available.';
+    console.log('[PR Context Assistant] Claude response received:', assistantMessage);
 
     // Don't update conversation history - keep it at just the first 2 messages
     // Each new selection just replaces the query, doesn't append
@@ -387,12 +386,21 @@ When explaining code:
   }
 
   private formatContent(content: string): string {
+    console.log('[PR Context Assistant] formatContent input:', content);
     // Convert markdown formatting and preserve bullet points
-    return content
+    const result = content
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
+      .replace(/```[\s\S]*?```/g, (match) => {
+        // Multi-line code blocks - preserve as-is but escape HTML
+        const code = match.slice(3, -3).trim();
+        return `<pre><code>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`;
+      })
+      .replace(/`([^`]*?)`/g, '<code>$1</code>') // Inline code (single backticks) - use *? for non-greedy
       .replace(/^- /gm, '• ') // Convert dashes to bullets
       .replace(/^\* /gm, '• ') // Convert asterisks to bullets
       .replace(/\n/g, '<br>'); // Line breaks
+    console.log('[PR Context Assistant] formatContent output:', result);
+    return result;
   }
 
   private hideTooltip() {

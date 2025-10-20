@@ -60,6 +60,15 @@
   font-weight: 600;
 }
 
+.pr-context-tooltip-content code {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: #fbbf24;
+}
+
 .pr-context-tooltip-content br {
   display: block;
   content: '';
