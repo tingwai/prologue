@@ -33,7 +33,7 @@ class PRContextAssistant {
       if (url !== lastUrl) {
         console.log('[PR Context Assistant] URL changed from', lastUrl, 'to', url);
         lastUrl = url;
-        
+
         // Check if we're still on a PR page
         if (this.extractPRInfo(url)) {
           console.log('[PR Context Assistant] Navigated to different PR, reloading context');
@@ -74,17 +74,64 @@ class PRContextAssistant {
         return;
       }
 
-      // Fetch the raw diff from GitHub
-      const diffUrl = `https://patch-diff.githubusercontent.com/raw/${prInfo.owner}/${prInfo.repo}/pull/${prInfo.number}.diff`;
-      console.log('[PR Context Assistant] Fetching diff from:', diffUrl);
+      // Get GitHub token if available (for private repos)
+      const githubToken = await this.getGithubToken();
 
-      const diffResponse = await fetch(diffUrl);
-      if (!diffResponse.ok) {
-        throw new Error(`Failed to fetch diff: ${diffResponse.statusText}`);
+      // Try to fetch diff - use GitHub API for private repos, patch-diff for public
+      let diffContent: string;
+
+      if (githubToken) {
+        // Use GitHub API for authenticated requests (works for private repos)
+        const apiUrl = `https://api.github.com/repos/${prInfo.owner}/${prInfo.repo}/pulls/${prInfo.number}`;
+        console.log('[PR Context Assistant] Fetching PR via GitHub API:', apiUrl);
+
+        const apiResponse = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${githubToken}`,
+            'Accept': 'application/vnd.github.v3.diff',
+            'X-GitHub-Api-Version': '2022-11-28'
+          }
+        });
+
+        console.log('[PR Context Assistant] GitHub API response status:', apiResponse.status, apiResponse.statusText);
+
+        if (!apiResponse.ok) {
+          const responseText = await apiResponse.text();
+          console.error('[PR Context Assistant] GitHub API fetch failed:', {
+            status: apiResponse.status,
+            statusText: apiResponse.statusText,
+            responseBody: responseText.substring(0, 500)
+          });
+          throw new Error(`Failed to fetch diff via GitHub API (${apiResponse.status}): ${apiResponse.statusText || 'Check token permissions'}`);
+        }
+
+        diffContent = await apiResponse.text();
+        console.log('[PR Context Assistant] Diff fetched via GitHub API, length:', diffContent.length);
+      } else {
+        // Use patch-diff service for public repos (no auth needed)
+        const diffUrl = `https://patch-diff.githubusercontent.com/raw/${prInfo.owner}/${prInfo.repo}/pull/${prInfo.number}.diff`;
+        console.log('[PR Context Assistant] Fetching diff from patch-diff:', diffUrl);
+
+        const diffResponse = await fetch(diffUrl);
+        console.log('[PR Context Assistant] Patch-diff response status:', diffResponse.status, diffResponse.statusText);
+
+        if (!diffResponse.ok) {
+          const responseText = await diffResponse.text();
+          console.error('[PR Context Assistant] Patch-diff fetch failed:', {
+            status: diffResponse.status,
+            statusText: diffResponse.statusText,
+            responseBody: responseText.substring(0, 500)
+          });
+
+          if (diffResponse.status === 404) {
+            throw new Error('Failed to fetch diff: Repository may be private. Please add a GitHub token in extension options.');
+          }
+          throw new Error(`Failed to fetch diff (${diffResponse.status}): ${diffResponse.statusText || 'Unknown error'}`);
+        }
+
+        diffContent = await diffResponse.text();
+        console.log('[PR Context Assistant] Diff fetched from patch-diff, length:', diffContent.length);
       }
-
-      const diffContent = await diffResponse.text();
-      console.log('[PR Context Assistant] Diff fetched, length:', diffContent.length);
 
       // Initialize conversation with Claude
       const systemPrompt = `You are a code review assistant. Focus on being insightful, not verbose.
@@ -154,6 +201,11 @@ When explaining code:
     return result.anthropicApiKey || null;
   }
 
+  private async getGithubToken(): Promise<string | null> {
+    const result = await browser.storage.sync.get('githubToken');
+    return result.githubToken || null;
+  }
+
   private setupSelectionListener() {
     console.log('[PR Context Assistant] Setting up selection listener');
     document.addEventListener('mouseup', async (event) => {
@@ -209,7 +261,7 @@ When explaining code:
         // Wait 300ms before showing tooltip and sending query (debounce for multi-clicks)
         this.queryTimeout = setTimeout(async () => {
           console.log('[PR Context Assistant] 300ms elapsed, showing tooltip and querying');
-          this.showTooltip('🤔 Analyzing...', position, false);
+          this.showTooltip('Thinking...', position, false);
           await this.sendExplanationQuery(selectedText, position);
         }, 300);
       }, 10);
@@ -266,7 +318,7 @@ When explaining code:
       }
 
       const explanation = await this.queryAgent(selectedText, apiKey, signal);
-      
+
       // Only show tooltip if request wasn't aborted
       if (!signal.aborted) {
         this.showTooltip(explanation, position, true);
@@ -291,7 +343,7 @@ When explaining code:
     // Count lines in selection
     const lineCount = selectedText.split('\n').length;
     const isSingleLine = lineCount === 1;
-    
+
     const queryPrompt = isSingleLine
       ? `Explain this line:\n\n\`\`\`\n${selectedText}\n\`\`\`\n\nBe insightful, not verbose. Skip obvious details. Focus on:\n- Non-obvious behavior or gotchas\n- Why this change in the PR\n- If straightforward, just say "Straightforward: [brief]"\n\n1-3 bullet points max using • or -.`
       : `Explain this code:\n\n\`\`\`\n${selectedText}\n\`\`\`\n\nBe insightful, not verbose. Skip obvious details. Focus on:\n- Non-obvious patterns, edge cases, or gotchas\n- Why these changes in the PR\n- If straightforward, just say "Straightforward: [brief]"\n\n1-3 bullet points max using • or -.`;

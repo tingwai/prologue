@@ -17,41 +17,51 @@
     }
 
     .container {
-      max-width: 600px;
+      max-width: 700px;
       margin: 0 auto;
       background: white;
       border-radius: 12px;
-      padding: 40px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      padding: 48px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
     }
 
     h1 {
-      font-size: 24px;
-      margin-bottom: 8px;
-      color: #333;
+      font-size: 28px;
+      margin-bottom: 12px;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
 
     .subtitle {
-      color: #666;
-      margin-bottom: 32px;
-      font-size: 14px;
+      color: #6b7280;
+      margin-bottom: 40px;
+      font-size: 15px;
+      line-height: 1.6;
     }
 
     .form-group {
       margin-bottom: 24px;
     }
 
+    .input-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     label {
       display: block;
       margin-bottom: 8px;
-      font-weight: 500;
-      color: #333;
+      font-weight: 600;
+      color: #1f2937;
       font-size: 14px;
     }
 
     input[type="password"],
     input[type="text"] {
-      width: 100%;
+      flex: 1;
       padding: 12px;
       border: 1px solid #ddd;
       border-radius: 6px;
@@ -66,9 +76,18 @@
     }
 
     .help-text {
-      margin-top: 6px;
+      margin-top: 8px;
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+
+    .help-text code {
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 3px;
       font-size: 12px;
-      color: #666;
+      color: #374151;
     }
 
     .help-text a {
@@ -135,49 +154,121 @@
     }
 
     .info-box {
-      background: #f0f6ff;
-      border: 1px solid #bfdbfe;
-      border-radius: 6px;
-      padding: 16px;
-      margin-bottom: 24px;
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 32px;
     }
 
     .info-box h3 {
-      font-size: 14px;
-      margin-bottom: 8px;
-      color: #1e40af;
+      font-size: 15px;
+      margin-bottom: 10px;
+      color: #0369a1;
+      font-weight: 600;
     }
 
     .info-box p {
-      font-size: 13px;
-      color: #1e40af;
-      line-height: 1.5;
+      font-size: 14px;
+      color: #075985;
+      line-height: 1.6;
+    }
+
+    .info-box ul {
+      margin: 12px 0 0 20px;
+      font-size: 14px;
+      color: #075985;
+      line-height: 1.8;
+    }
+
+    .toggle-visibility {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.2s;
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+    }
+
+    .toggle-visibility:hover {
+      opacity: 0.7;
+    }
+
+    .toggle-visibility svg {
+      width: 20px;
+      height: 20px;
+      stroke: #6b7280;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>⚙️ PR Context Assistant</h1>
-    <p class="subtitle">Configure your AI-powered GitHub PR review assistant</p>
+    <h1><span>⚙️</span> Prologue Settings</h1>
+    <p class="subtitle">Configure your extension to get AI-powered code explanations on GitHub pull requests</p>
 
     <div class="info-box">
-      <h3>How it works</h3>
+      <h3>💡 How it works</h3>
       <p>
-        This extension loads the entire PR diff when you open a GitHub PR page and sends it to Claude. 
-        Simply select any code snippet to get instant context and explanations. 
-        Each PR is cached per commit, maintaining conversation history for context-aware responses.
+        This extension analyzes GitHub PR diffs using Claude AI. When you select any code snippet in a pull request,
+        you'll get instant explanations and context.
       </p>
+      <ul>
+        <li>PRs are cached per commit for fast responses</li>
+        <li>Private repository support with GitHub token</li>
+        <li>Concise, insightful explanations (not verbose)</li>
+      </ul>
     </div>
 
     <div class="form-group">
       <label for="apiKey">Anthropic API Key</label>
-      <input 
-        type="password" 
-        id="apiKey" 
-        placeholder="sk-ant-xxxxxxxxxxxxxxxxxxxx"
-      >
+      <div class="input-wrapper">
+        <input
+          type="password"
+          id="apiKey"
+          placeholder="sk-ant-xxxxxxxxxxxxxxxxxxxx"
+        >
+        <button type="button" class="toggle-visibility" data-target="apiKey" title="Toggle visibility">
+          <svg viewBox="0 0 24 24">
+            <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle class="eye-open" cx="12" cy="12" r="3"></circle>
+            <line class="eye-closed" style="display:none" x1="1" y1="1" x2="23" y2="23"></line>
+          </svg>
+        </button>
+      </div>
       <div class="help-text">
         Get your API key from <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="githubToken">GitHub Personal Access Token (Optional)</label>
+      <div class="input-wrapper">
+        <input
+          type="password"
+          id="githubToken"
+          placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+        >
+        <button type="button" class="toggle-visibility" data-target="githubToken" title="Toggle visibility">
+          <svg viewBox="0 0 24 24">
+            <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle class="eye-open" cx="12" cy="12" r="3"></circle>
+            <line class="eye-closed" style="display:none" x1="1" y1="1" x2="23" y2="23"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="help-text">
+        Required for private repositories. Create a classic token at
+        <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a>
+        with <code>repo</code> scope.
       </div>
     </div>
 

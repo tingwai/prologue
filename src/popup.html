@@ -33,6 +33,12 @@
       margin-bottom: 16px;
     }
 
+    .input-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
     label {
       display: block;
       font-size: 13px;
@@ -41,8 +47,9 @@
       color: #374151;
     }
 
-    input[type="password"] {
-      width: 100%;
+    input[type="password"],
+    input[type="text"] {
+      flex: 1;
       padding: 8px 10px;
       border: 1px solid #d1d5db;
       border-radius: 6px;
@@ -132,6 +139,34 @@
     .link-button:hover {
       background: #e5e7eb;
     }
+
+    .toggle-visibility {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.2s;
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+    }
+
+    .toggle-visibility:hover {
+      opacity: 0.7;
+    }
+
+    .toggle-visibility svg {
+      width: 18px;
+      height: 18px;
+      stroke: #9ca3af;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
   </style>
 </head>
 <body>
@@ -140,23 +175,53 @@
 
   <div class="form-group">
     <label for="apiKey">Anthropic API Key</label>
-    <input 
-      type="password" 
-      id="apiKey" 
-      placeholder="sk-ant-xxxxxxxxxxxxxxxxxxxx"
-    >
+    <div class="input-wrapper">
+      <input 
+        type="password" 
+        id="apiKey" 
+        placeholder="sk-ant-xxxxxxxxxxxxxxxxxxxx"
+      >
+      <button type="button" class="toggle-visibility" data-target="apiKey" title="Toggle visibility">
+        <svg viewBox="0 0 24 24">
+          <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle class="eye-open" cx="12" cy="12" r="3"></circle>
+          <line class="eye-closed" style="display:none" x1="1" y1="1" x2="23" y2="23"></line>
+        </svg>
+      </button>
+    </div>
     <div class="help-text">
-      Get your key from <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a>
+      Get from <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a>
     </div>
   </div>
 
-  <button id="save">Save API Key</button>
+  <div class="form-group">
+    <label for="githubToken">GitHub Token (Optional)</label>
+    <div class="input-wrapper">
+      <input 
+        type="password" 
+        id="githubToken" 
+        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+      >
+      <button type="button" class="toggle-visibility" data-target="githubToken" title="Toggle visibility">
+        <svg viewBox="0 0 24 24">
+          <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle class="eye-open" cx="12" cy="12" r="3"></circle>
+          <line class="eye-closed" style="display:none" x1="1" y1="1" x2="23" y2="23"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="help-text">
+      For private repos - <a href="https://github.com/settings/tokens" target="_blank">Create token</a>
+    </div>
+  </div>
+
+  <button id="save">Save Settings</button>
   
   <div id="status" class="status"></div>
 
   <div class="divider"></div>
 
-  <a href="options.html" class="link-button" id="openOptions">Open Full Settings</a>
+  <a href="options.html" class="link-button" id="openOptions">⚙️ Manage Extension Settings</a>
 
   <script src="popup.js"></script>
 </body>

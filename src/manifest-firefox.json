@@ -7,6 +7,7 @@
     "storage",
     "activeTab",
     "https://github.com/*",
+    "https://api.github.com/*",
     "https://patch-diff.githubusercontent.com/*",
     "https://api.anthropic.com/*"
   ],
