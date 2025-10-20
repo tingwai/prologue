@@ -1,45 +1,80 @@
 import browser from 'webextension-polyfill';
+import type { CachedStorageValue } from './types';
+import { TIMING, LOG_PREFIX } from './constants';
 
-// Background service worker for extension
-console.log('[PR Context Assistant] Background service worker loaded');
+/**
+ * Background service worker for the extension
+ * Handles extension lifecycle and cache management
+ */
 
-// Listen for extension installation
+console.log(`${LOG_PREFIX} Background service worker loaded`);
+
+/**
+ * Open options page on fresh install
+ */
 browser.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
-    console.log('[PR Context Assistant] Extension installed');
-    browser.runtime.openOptionsPage();
+    console.log(`${LOG_PREFIX} Extension installed`);
+    browser.runtime.openOptionsPage().catch(error => {
+      console.error(`${LOG_PREFIX} Failed to open options page:`, error);
+    });
   }
 });
 
-// Handle messages from content script if needed
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('[PR Context Assistant] Message received:', message);
+/**
+ * Handle messages from content script if needed
+ */
+browser.runtime.onMessage.addListener((message, sender) => {
+  console.log(`${LOG_PREFIX} Message received:`, message, 'from', sender.tab?.id);
   // Return nothing (void) for sync handling
+  return undefined;
 });
 
-// Clean up old cache entries (older than 7 days)
-async function cleanupOldCache() {
-  const storage = await browser.storage.local.get(null);
-  const now = Date.now();
-  const weekInMs = 7 * 24 * 60 * 60 * 1000;
+/**
+ * Type guard to check if a value is a cached storage value
+ */
+function isCachedValue(value: unknown): value is CachedStorageValue {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'timestamp' in value &&
+    typeof (value as CachedStorageValue).timestamp === 'number'
+  );
+}
 
-  const keysToRemove: string[] = [];
+/**
+ * Clean up old cache entries (older than CACHE_MAX_AGE)
+ */
+async function cleanupOldCache(): Promise<void> {
+  try {
+    const storage = await browser.storage.local.get(null);
+    const now = Date.now();
+    const keysToRemove: string[] = [];
 
-  for (const [key, value] of Object.entries(storage)) {
-    if (typeof value === 'object' && value !== null && 'timestamp' in value) {
-      const timestamp = (value as any).timestamp;
-      if (now - timestamp > weekInMs) {
+    for (const [key, value] of Object.entries(storage)) {
+      if (isCachedValue(value) && now - value.timestamp > TIMING.CACHE_MAX_AGE) {
         keysToRemove.push(key);
       }
     }
-  }
 
-  if (keysToRemove.length > 0) {
-    await browser.storage.local.remove(keysToRemove);
-    console.log(`[PR Context Assistant] Cleaned up ${keysToRemove.length} old cache entries`);
+    if (keysToRemove.length > 0) {
+      await browser.storage.local.remove(keysToRemove);
+      console.log(`${LOG_PREFIX} Cleaned up ${keysToRemove.length} old cache entries`);
+    }
+  } catch (error) {
+    console.error(`${LOG_PREFIX} Cache cleanup failed:`, error);
   }
 }
 
-// Run cleanup on startup and periodically
+/**
+ * Run cleanup on startup and periodically
+ */
 cleanupOldCache();
-setInterval(cleanupOldCache, 24 * 60 * 60 * 1000); // Once per day
+const cleanupIntervalId = setInterval(cleanupOldCache, TIMING.CACHE_CLEANUP_INTERVAL);
+
+// Clean up interval on extension unload (not always possible in service workers)
+if (typeof self !== 'undefined' && 'addEventListener' in self) {
+  self.addEventListener('unload', () => {
+    clearInterval(cleanupIntervalId);
+  });
+}

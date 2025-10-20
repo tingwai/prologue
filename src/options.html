@@ -235,17 +235,19 @@
           type="password"
           id="apiKey"
           placeholder="sk-ant-xxxxxxxxxxxxxxxxxxxx"
+          aria-label="Anthropic API Key"
+          aria-describedby="apiKeyHelp"
         >
-        <button type="button" class="toggle-visibility" data-target="apiKey" title="Toggle visibility">
-          <svg viewBox="0 0 24 24">
+        <button type="button" class="toggle-visibility" data-target="apiKey" title="Toggle visibility" aria-label="Toggle API key visibility">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
             <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
             <circle class="eye-open" cx="12" cy="12" r="3"></circle>
             <line class="eye-closed" style="display:none" x1="1" y1="1" x2="23" y2="23"></line>
           </svg>
         </button>
       </div>
-      <div class="help-text">
-        Get your API key from <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a>
+      <div class="help-text" id="apiKeyHelp">
+        Get your API key from <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>
       </div>
     </div>
 
@@ -256,28 +258,30 @@
           type="password"
           id="githubToken"
           placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+          aria-label="GitHub Personal Access Token"
+          aria-describedby="githubTokenHelp"
         >
-        <button type="button" class="toggle-visibility" data-target="githubToken" title="Toggle visibility">
-          <svg viewBox="0 0 24 24">
+        <button type="button" class="toggle-visibility" data-target="githubToken" title="Toggle visibility" aria-label="Toggle GitHub token visibility">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
             <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
             <circle class="eye-open" cx="12" cy="12" r="3"></circle>
             <line class="eye-closed" style="display:none" x1="1" y1="1" x2="23" y2="23"></line>
           </svg>
         </button>
       </div>
-      <div class="help-text">
+      <div class="help-text" id="githubTokenHelp">
         Required for private repositories. Create a classic token at
-        <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a>
+        <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer">github.com/settings/tokens</a>
         with <code>repo</code> scope.
       </div>
     </div>
 
     <div class="button-group">
-      <button id="save" class="btn-primary">Save Settings</button>
-      <button id="clearCache" class="btn-secondary">Clear Cache</button>
+      <button id="save" class="btn-primary" aria-label="Save settings">Save Settings</button>
+      <button id="clearCache" class="btn-secondary" aria-label="Clear cache">Clear Cache</button>
     </div>
 
-    <div id="status" class="status"></div>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
   </div>
 
   <script src="options.js"></script>

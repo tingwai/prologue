@@ -1,4 +1,6 @@
 import browser from 'webextension-polyfill';
+import { STORAGE_KEYS, TIMING, MESSAGES, LOG_PREFIX } from './constants';
+import { maskApiKey, maskGithubToken } from './utils';
 
 interface SettingsFormElements {
   apiKeyInput: HTMLInputElement;
@@ -22,72 +24,90 @@ export function initializeSettingsForm(elements: SettingsFormElements, isPopup: 
   loadSettings();
 
   async function loadSettings() {
-    const result = await browser.storage.sync.get(['anthropicApiKey', 'githubToken']);
-    
-    if (result.anthropicApiKey) {
-      fullApiKey = result.anthropicApiKey as string;
-      if (isPopup) {
-        // Show masked version in popup
-        apiKeyInput.value = fullApiKey.substring(0, 10) + '...' + fullApiKey.substring(fullApiKey.length - 4);
-        apiKeyInput.placeholder = 'Configured';
-      } else {
-        apiKeyInput.value = fullApiKey;
+    try {
+      const result = await browser.storage.sync.get([
+        STORAGE_KEYS.ANTHROPIC_API_KEY,
+        STORAGE_KEYS.GITHUB_TOKEN
+      ]);
+
+      if (result[STORAGE_KEYS.ANTHROPIC_API_KEY]) {
+        fullApiKey = result[STORAGE_KEYS.ANTHROPIC_API_KEY] as string;
+        if (isPopup) {
+          // Show masked version in popup
+          apiKeyInput.value = maskApiKey(fullApiKey);
+          apiKeyInput.placeholder = MESSAGES.PLACEHOLDERS.API_KEY_CONFIGURED;
+        } else {
+          apiKeyInput.value = fullApiKey;
+        }
       }
-    }
-    
-    if (result.githubToken) {
-      fullGithubToken = result.githubToken as string;
-      if (isPopup) {
-        // Show masked version in popup
-        githubTokenInput.value = fullGithubToken.substring(0, 8) + '...' + fullGithubToken.substring(fullGithubToken.length - 4);
-        githubTokenInput.placeholder = 'Configured';
-      } else {
-        githubTokenInput.value = fullGithubToken;
+
+      if (result[STORAGE_KEYS.GITHUB_TOKEN]) {
+        fullGithubToken = result[STORAGE_KEYS.GITHUB_TOKEN] as string;
+        if (isPopup) {
+          // Show masked version in popup
+          githubTokenInput.value = maskGithubToken(fullGithubToken);
+          githubTokenInput.placeholder = MESSAGES.PLACEHOLDERS.API_KEY_CONFIGURED;
+        } else {
+          githubTokenInput.value = fullGithubToken;
+        }
       }
+    } catch (error) {
+      console.error(`${LOG_PREFIX} Failed to load settings:`, error);
+      showStatus('Failed to load settings', 'error');
     }
   }
 
   // Save settings
   saveButton.addEventListener('click', async () => {
-    const apiKey = apiKeyInput.value.trim();
-    const githubToken = githubTokenInput.value.trim();
-    
-    if (!apiKey) {
-      showStatus('Please enter an API key', 'error');
-      return;
-    }
+    try {
+      const apiKey = apiKeyInput.value.trim();
+      const githubToken = githubTokenInput.value.trim();
 
-    // Don't save if it's the masked version (popup only)
-    if (isPopup && apiKey.includes('...')) {
-      showStatus('Settings already configured', 'success');
-      return;
-    }
+      if (!apiKey) {
+        showStatus(MESSAGES.ERRORS.NO_API_KEY_WARNING, 'error');
+        return;
+      }
 
-    await browser.storage.sync.set({ 
-      anthropicApiKey: apiKey,
-      githubToken: githubToken || null
-    });
-    
-    showStatus('✓ Settings saved!', 'success');
-    
-    // Mask the values after saving in popup
-    if (isPopup) {
-      setTimeout(() => {
-        if (apiKey) {
-          apiKeyInput.value = apiKey.substring(0, 10) + '...' + apiKey.substring(apiKey.length - 4);
-        }
-        if (githubToken) {
-          githubTokenInput.value = githubToken.substring(0, 8) + '...' + githubToken.substring(githubToken.length - 4);
-        }
-      }, 500);
+      // Don't save if it's the masked version (popup only)
+      if (isPopup && apiKey.includes('...')) {
+        showStatus(MESSAGES.SUCCESS.SETTINGS_CONFIGURED, 'success');
+        return;
+      }
+
+      await browser.storage.sync.set({
+        [STORAGE_KEYS.ANTHROPIC_API_KEY]: apiKey,
+        [STORAGE_KEYS.GITHUB_TOKEN]: githubToken || null
+      });
+
+      showStatus(MESSAGES.SUCCESS.SETTINGS_SAVED, 'success');
+
+      // Mask the values after saving in popup
+      if (isPopup) {
+        setTimeout(() => {
+          if (apiKey) {
+            apiKeyInput.value = maskApiKey(apiKey);
+          }
+          if (githubToken) {
+            githubTokenInput.value = maskGithubToken(githubToken);
+          }
+        }, 500);
+      }
+    } catch (error) {
+      console.error(`${LOG_PREFIX} Failed to save settings:`, error);
+      showStatus('Failed to save settings', 'error');
     }
   });
 
   // Clear cache (options page only)
   if (clearCacheButton) {
     clearCacheButton.addEventListener('click', async () => {
-      await browser.storage.local.clear();
-      showStatus('✓ Cache cleared!', 'success');
+      try {
+        await browser.storage.local.clear();
+        showStatus(MESSAGES.SUCCESS.CACHE_CLEARED, 'success');
+      } catch (error) {
+        console.error(`${LOG_PREFIX} Failed to clear cache:`, error);
+        showStatus('Failed to clear cache', 'error');
+      }
     });
   }
 
@@ -98,7 +118,7 @@ export function initializeSettingsForm(elements: SettingsFormElements, isPopup: 
 
     setTimeout(() => {
       statusDiv.style.display = 'none';
-    }, 2000);
+    }, TIMING.STATUS_MESSAGE_DURATION);
   }
 
   function setupToggleVisibility() {
@@ -134,13 +154,13 @@ export function initializeSettingsForm(elements: SettingsFormElements, isPopup: 
           // Hide slash, show eye parts
           eyeOpen.forEach(el => (el as SVGElement).style.display = 'block');
           if (eyeClosed) eyeClosed.style.display = 'none';
-          
+
           // In popup mode, show masked value when hiding
           if (isPopup) {
             if (targetId === 'apiKey' && fullApiKey) {
-              input.value = fullApiKey.substring(0, 10) + '...' + fullApiKey.substring(fullApiKey.length - 4);
+              input.value = maskApiKey(fullApiKey);
             } else if (targetId === 'githubToken' && fullGithubToken) {
-              input.value = fullGithubToken.substring(0, 8) + '...' + fullGithubToken.substring(fullGithubToken.length - 4);
+              input.value = maskGithubToken(fullGithubToken);
             }
           }
         }

@@ -1,16 +1,12 @@
 import browser from 'webextension-polyfill';
-import type { PRContext, TooltipPosition } from './types';
-
-interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
+import type { PRContext, TooltipPosition, ConversationMessage } from './types';
+import { TIMING, UI, GITHUB_SELECTORS, API, MESSAGES, STORAGE_KEYS, LOG_PREFIX } from './constants';
+import { getSystemPrompt, ASSISTANT_ACKNOWLEDGMENT, getSingleLineQueryPrompt, getMultiLineQueryPrompt } from './prompts';
 
 class PRContextAssistant {
   private tooltip: HTMLElement | null = null;
   private prContext: PRContext | null = null;
   private conversationHistory: ConversationMessage[] = [];
-  private isLoading = false;
   private queryTimeout: NodeJS.Timeout | null = null;
   private activeAbortController: AbortController | null = null;
 
@@ -22,7 +18,7 @@ class PRContextAssistant {
   private async init() {
     await this.loadPRContext();
     this.setupSelectionListener();
-    console.log('[PR Context Assistant] Initialized');
+    console.log(`${LOG_PREFIX} Initialized`);
   }
 
   private setupNavigationListener() {
@@ -31,12 +27,12 @@ class PRContextAssistant {
     new MutationObserver(() => {
       const url = location.href;
       if (url !== lastUrl) {
-        console.log('[PR Context Assistant] URL changed from', lastUrl, 'to', url);
+        console.log(`${LOG_PREFIX} URL changed from`, lastUrl, 'to', url);
         lastUrl = url;
 
         // Check if we're still on a PR page
         if (this.extractPRInfo(url)) {
-          console.log('[PR Context Assistant] Navigated to different PR, reloading context');
+          console.log(`${LOG_PREFIX} Navigated to different PR, reloading context`);
           this.prContext = null;
           this.conversationHistory = [];
           this.hideTooltip();
@@ -56,13 +52,12 @@ class PRContextAssistant {
     if (cached[cacheKey]) {
       this.prContext = cached[cacheKey];
       this.conversationHistory = cached[cacheKey].conversationHistory || [];
-      console.log('[PR Context Assistant] Loaded from cache');
+      console.log(`${LOG_PREFIX} Loaded from cache`);
       return;
     }
 
     const apiKey = await this.getApiKey();
     if (!apiKey) {
-      console.warn('[PR Context Assistant] No API key set. Please configure in extension options.');
       return;
     }
 
@@ -134,24 +129,9 @@ class PRContextAssistant {
       }
 
       // Initialize conversation with Claude
-      const systemPrompt = `You are a code review assistant. Focus on being insightful, not verbose.
-
-Here is the full PR diff:
-
-${diffContent}
-
-When explaining code:
-- Skip obvious things (e.g., "this creates a variable", "this is a function")
-- Focus on non-obvious behavior, edge cases, gotchas, or clever patterns
-- Explain WHY code exists in this PR, not just WHAT it does
-- If code is straightforward, say so briefly
-- Be concise: 1-3 bullet points max
-- Only explain things worth mentioning`;
-
-      // Send initial message to Claude
       this.conversationHistory = [
-        { role: 'user', content: systemPrompt },
-        { role: 'assistant', content: 'I\'ve reviewed the PR diff and I\'m ready to help explain code snippets. Please select any code you\'d like me to explain.' }
+        { role: 'user', content: getSystemPrompt(diffContent) },
+        { role: 'assistant', content: ASSISTANT_ACKNOWLEDGMENT }
       ];
 
       this.prContext = {
@@ -173,7 +153,7 @@ When explaining code:
 
   private getCurrentCommit(): string {
     // Extract commit hash from GitHub PR page
-    const commitElement = document.querySelector('[data-hovercard-type="commit"]');
+    const commitElement = document.querySelector(GITHUB_SELECTORS.COMMIT_ELEMENT);
     if (commitElement) {
       const href = commitElement.getAttribute('href');
       return href?.split('/').pop() || 'latest';
@@ -197,24 +177,21 @@ When explaining code:
 
 
   private async getApiKey(): Promise<string | null> {
-    const result = await browser.storage.sync.get('anthropicApiKey');
-    return result.anthropicApiKey || null;
+    const result = await browser.storage.sync.get(STORAGE_KEYS.ANTHROPIC_API_KEY);
+    return result[STORAGE_KEYS.ANTHROPIC_API_KEY] || null;
   }
 
   private async getGithubToken(): Promise<string | null> {
-    const result = await browser.storage.sync.get('githubToken');
-    return result.githubToken || null;
+    const result = await browser.storage.sync.get(STORAGE_KEYS.GITHUB_TOKEN);
+    return result[STORAGE_KEYS.GITHUB_TOKEN] || null;
   }
 
   private setupSelectionListener() {
-    console.log('[PR Context Assistant] Setting up selection listener');
+    console.log(`${LOG_PREFIX} Setting up selection listener`);
     document.addEventListener('mouseup', async (event) => {
-      console.log('[PR Context Assistant] Mouseup detected!');
-
       // Ignore if selection is inside the tooltip
       const target = event.target as HTMLElement;
       if (this.tooltip && this.tooltip.contains(target)) {
-        console.log('[PR Context Assistant] Selection inside tooltip, ignoring');
         return;
       }
 
@@ -222,17 +199,14 @@ When explaining code:
       setTimeout(async () => {
         const selection = window.getSelection();
         const selectedText = selection?.toString().trim();
-        console.log('[PR Context Assistant] Selection:', { text: selectedText, length: selectedText?.length });
 
-        if (!selectedText || selectedText.length < 5) {
-          console.log('[PR Context Assistant] Selection too short, hiding tooltip');
+        if (!selectedText || selectedText.length < UI.MIN_SELECTION_LENGTH) {
           this.hideTooltip();
           return;
         }
 
         // Only trigger on code areas
         const isCode = this.isCodeArea(target);
-        console.log('[PR Context Assistant] isCodeArea:', isCode, 'target:', target);
         if (!isCode) {
           this.hideTooltip();
           return;
@@ -243,28 +217,25 @@ When explaining code:
           x: event.clientX + window.scrollX,
           y: event.clientY + window.scrollY,
         };
-        console.log('[PR Context Assistant] Selection ready, starting 300ms timer');
 
         // Clear any existing query timeout
         if (this.queryTimeout) {
-          console.log('[PR Context Assistant] Clearing previous timeout, restarting timer');
           clearTimeout(this.queryTimeout);
           this.queryTimeout = null;
         }
 
         // Check if context is loaded
         if (!this.prContext) {
-          this.showTooltip('⚠️ PR context not loaded. Please refresh the page.', position, true);
+          this.showTooltip(MESSAGES.ERRORS.PR_CONTEXT_NOT_LOADED, position, true);
           return;
         }
 
-        // Wait 300ms before showing tooltip and sending query (debounce for multi-clicks)
+        // Wait before showing tooltip and sending query (debounce for multi-clicks)
         this.queryTimeout = setTimeout(async () => {
-          console.log('[PR Context Assistant] 300ms elapsed, showing tooltip and querying');
-          this.showTooltip('Thinking...', position, false);
+          this.showTooltip(MESSAGES.LOADING.THINKING, position, false);
           await this.sendExplanationQuery(selectedText, position);
-        }, 300);
-      }, 10);
+        }, TIMING.SELECTION_DEBOUNCE);
+      }, TIMING.SELECTION_DELAY);
     });
 
     // Hide tooltip on click outside (not on scroll)
@@ -278,30 +249,14 @@ When explaining code:
 
   private isCodeArea(element: HTMLElement): boolean {
     // Check if selection is within code diff area
-    const isCode = !!(
-      element.closest('.blob-code') ||
-      element.closest('.file') ||
-      element.closest('.diff-view') ||
-      element.closest('.blob-wrapper') ||
-      element.closest('.diff-text-inner') ||
-      element.closest('[data-code-marker]')
+    return GITHUB_SELECTORS.CODE_AREAS.some(selector =>
+      element.closest(selector)
     );
-    console.log('[PR Context Assistant] isCodeArea check:', {
-      element: element.className,
-      hasBlobCode: !!element.closest('.blob-code'),
-      hasFile: !!element.closest('.file'),
-      hasDiffView: !!element.closest('.diff-view'),
-      hasBlobWrapper: !!element.closest('.blob-wrapper'),
-      hasDiffTextInner: !!element.closest('.diff-text-inner'),
-      result: isCode
-    });
-    return isCode;
   }
 
   private async sendExplanationQuery(selectedText: string, position: TooltipPosition) {
     // Cancel any previous ongoing API call
     if (this.activeAbortController) {
-      console.log('[PR Context Assistant] Aborting previous API call');
       this.activeAbortController.abort();
       this.activeAbortController = null;
     }
@@ -313,7 +268,7 @@ When explaining code:
     try {
       const apiKey = await this.getApiKey();
       if (!apiKey) {
-        this.showTooltip('⚠️ No API key configured. Go to extension options.', position, true);
+        this.showTooltip(MESSAGES.ERRORS.NO_API_KEY, position, true);
         return;
       }
 
@@ -326,11 +281,10 @@ When explaining code:
     } catch (error: any) {
       // Don't show error if request was intentionally aborted
       if (error.name === 'AbortError') {
-        console.log('[PR Context Assistant] Query aborted');
         return;
       }
-      console.error('[PR Context Assistant] Query failed:', error);
-      this.showTooltip('❌ Failed to get explanation. Try again.', position, true);
+      console.error(`${LOG_PREFIX} Query failed:`, error);
+      this.showTooltip(MESSAGES.ERRORS.QUERY_FAILED, position, true);
     } finally {
       // Clean up abort controller if it's still the active one
       if (this.activeAbortController?.signal === signal) {
@@ -344,46 +298,39 @@ When explaining code:
     const lineCount = selectedText.split('\n').length;
     const isSingleLine = lineCount === 1;
 
+    // Get appropriate prompt based on selection size
     const queryPrompt = isSingleLine
-      ? `Explain this line:\n\n\`\`\`\n${selectedText}\n\`\`\`\n\nBe insightful, not verbose. Skip obvious details. Focus on:\n- Non-obvious behavior or gotchas\n- Why this change in the PR\n- If straightforward, just say "Straightforward: [brief]"\n\n1-3 bullet points max using • or -.`
-      : `Explain this code:\n\n\`\`\`\n${selectedText}\n\`\`\`\n\nBe insightful, not verbose. Skip obvious details. Focus on:\n- Non-obvious patterns, edge cases, or gotchas\n- Why these changes in the PR\n- If straightforward, just say "Straightforward: [brief]"\n\n1-3 bullet points max using • or -.`;
-
-    console.log('[PR Context Assistant] Querying Claude');
-    console.log('[PR Context Assistant] Current conversation history length:', this.conversationHistory.length);
+      ? getSingleLineQueryPrompt(selectedText)
+      : getMultiLineQueryPrompt(selectedText);
 
     // Only keep first 2 messages (system prompt + assistant acknowledgment)
     // Always replace the user query (3rd message if it exists)
     const baseHistory = this.conversationHistory.slice(0, 2);
     const messages = [...baseHistory, { role: 'user' as const, content: queryPrompt }];
 
-    console.log('[PR Context Assistant] Sending messages length:', messages.length);
-
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        'anthropic-version': API.ANTHROPIC_VERSION,
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 1024,
+        model: API.CLAUDE_MODEL,
+        max_tokens: API.MAX_TOKENS,
         messages: messages,
       }),
       signal: signal, // Add abort signal to fetch
     });
 
-    console.log('[PR Context Assistant] API response status:', response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[PR Context Assistant] API error:', response.status, errorText);
+      console.error(`${LOG_PREFIX} API error:`, response.status, errorText);
       throw new Error(`Claude API failed: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     const assistantMessage = data.content[0]?.text || 'No explanation available.';
-    console.log('[PR Context Assistant] Claude response received:', assistantMessage);
 
     // Don't update conversation history - keep it at just the first 2 messages
     // Each new selection just replaces the query, doesn't append
@@ -407,15 +354,16 @@ When explaining code:
     // Position tooltip - always below cursor
     const tooltipRect = this.tooltip.getBoundingClientRect();
     let left = position.x - tooltipRect.width / 2;
-    let top = position.y + 20; // Always show 20px below cursor
+    let top = position.y + UI.TOOLTIP_OFFSET_Y; // Show below cursor
 
     // Always add the below class for arrow direction
     this.tooltip.classList.add('pr-context-tooltip-below');
 
     // Keep tooltip horizontally in viewport
-    if (left < 10) left = 10;
-    if (left + tooltipRect.width > window.innerWidth - 10) {
-      left = window.innerWidth - tooltipRect.width - 10;
+    const padding = UI.TOOLTIP_PADDING;
+    if (left < padding) left = padding;
+    if (left + tooltipRect.width > window.innerWidth - padding) {
+      left = window.innerWidth - tooltipRect.width - padding;
     }
 
     this.tooltip.style.left = `${left}px`;
@@ -432,15 +380,14 @@ When explaining code:
         if (copyBtn) copyBtn.textContent = '✓';
         setTimeout(() => {
           if (copyBtn) copyBtn.textContent = '📋';
-        }, 1000);
+        }, TIMING.COPY_FEEDBACK_DURATION);
       });
     }
   }
 
   private formatContent(content: string): string {
-    console.log('[PR Context Assistant] formatContent input:', content);
     // Convert markdown formatting and preserve bullet points
-    const result = content
+    return content
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
       .replace(/```[\s\S]*?```/g, (match) => {
         // Multi-line code blocks - preserve as-is but escape HTML
@@ -451,8 +398,6 @@ When explaining code:
       .replace(/^- /gm, '• ') // Convert dashes to bullets
       .replace(/^\* /gm, '• ') // Convert asterisks to bullets
       .replace(/\n/g, '<br>'); // Line breaks
-    console.log('[PR Context Assistant] formatContent output:', result);
-    return result;
   }
 
   private hideTooltip() {
