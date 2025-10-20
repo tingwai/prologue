@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveButton = document.getElementById('save') as HTMLButtonElement;
     const statusDiv = document.getElementById('status') as HTMLDivElement;
     const clearCacheButton = document.getElementById('clearCache') as HTMLButtonElement;
+    const githubTokenStatusDiv = document.getElementById('githubTokenStatus') as HTMLDivElement;
 
     if (!apiKeyInput || !githubTokenInput || !saveButton || !statusDiv || !clearCacheButton) {
       console.error(`${LOG_PREFIX} Required DOM elements not found`);
@@ -20,7 +21,8 @@ document.addEventListener('DOMContentLoaded', () => {
       githubTokenInput,
       saveButton,
       statusDiv,
-      clearCacheButton
+      clearCacheButton,
+      githubTokenStatusDiv
     }, false); // isPopup = false
   } catch (error) {
     console.error(`${LOG_PREFIX} Failed to initialize options page:`, error);

@@ -343,8 +343,15 @@ class PRContextAssistant {
 
     this.tooltip = document.createElement('div');
     this.tooltip.className = 'pr-context-tooltip';
+
+    // Apply glow effect for loading state
+    const isLoading = content === MESSAGES.LOADING.THINKING;
+    const formattedContent = isLoading
+      ? `<span class="pr-context-tooltip-loading" data-text="${content}" style="--glow-duration: ${UI.GLOW_ANIMATION_DURATION}s">${content}</span>`
+      : this.formatContent(content);
+
     this.tooltip.innerHTML = `
-      <div class="pr-context-tooltip-content">${this.formatContent(content)}</div>
+      <div class="pr-context-tooltip-content">${formattedContent}</div>
       ${allowCopy ? '<button class="pr-context-copy-btn" title="Copy">📋</button>' : ''}
       <button class="pr-context-close-btn" title="Close">✕</button>
     `;

@@ -22,6 +22,12 @@ export const UI = {
   API_KEY_DISPLAY_SUFFIX: 4,
   GITHUB_TOKEN_DISPLAY_PREFIX: 8,
   GITHUB_TOKEN_DISPLAY_SUFFIX: 4,
+  // Glow effect configuration for loading state
+  // Note: GLOW_WINDOW_SIZE is a reference value. The actual window is controlled
+  // by the CSS gradient in styles.css. Adjust gradient stop percentages to change
+  // the window size (currently ~40-60% creates a bell curve effect)
+  GLOW_WINDOW_SIZE: 4, // Approximate number of characters affected by the glow
+  GLOW_ANIMATION_DURATION: 3, // Duration in seconds for one complete slide cycle
 } as const;
 
 // GitHub selectors

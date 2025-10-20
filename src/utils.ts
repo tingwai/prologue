@@ -3,6 +3,7 @@
  */
 
 import { UI } from './constants';
+import { LOG_PREFIX } from './constants';
 
 /**
  * Masks a sensitive string by showing only the prefix and suffix
@@ -46,4 +47,54 @@ export function maskGithubToken(token: string): string {
     UI.GITHUB_TOKEN_DISPLAY_PREFIX,
     UI.GITHUB_TOKEN_DISPLAY_SUFFIX
   );
+}
+
+/**
+ * Interface for GitHub token information
+ */
+export interface GitHubTokenInfo {
+  valid: boolean;
+  expiresAt?: string; // ISO date string
+  scopes?: string[];
+  error?: string;
+}
+
+/**
+ * Checks GitHub token validity and expiration
+ * @param token The GitHub personal access token
+ * @returns Token information including validity and expiration
+ */
+export async function checkGitHubToken(token: string): Promise<GitHubTokenInfo> {
+  try {
+    const response = await fetch('https://api.github.com/user', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      }
+    });
+
+    if (!response.ok) {
+      return {
+        valid: false,
+        error: `Invalid token (${response.status})`
+      };
+    }
+
+    // Check for token expiration in headers (for fine-grained tokens)
+    const expiresAt = response.headers.get('github-authentication-token-expiration');
+    const scopes = response.headers.get('x-oauth-scopes')?.split(', ').filter(Boolean);
+
+    return {
+      valid: true,
+      expiresAt: expiresAt || undefined,
+      scopes
+    };
+  } catch (error) {
+    console.error(`${LOG_PREFIX} Failed to check GitHub token:`, error);
+    return {
+      valid: false,
+      error: 'Failed to validate token'
+    };
+  }
 }

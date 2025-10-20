@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveButton = document.getElementById('save') as HTMLButtonElement;
     const statusDiv = document.getElementById('status') as HTMLDivElement;
     const openOptionsButton = document.getElementById('openOptions') as HTMLAnchorElement;
+    const githubTokenStatusDiv = document.getElementById('githubTokenStatus') as HTMLDivElement;
 
     if (!apiKeyInput || !githubTokenInput || !saveButton || !statusDiv || !openOptionsButton) {
       console.error(`${LOG_PREFIX} Required DOM elements not found`);
@@ -20,7 +21,8 @@ document.addEventListener('DOMContentLoaded', () => {
       apiKeyInput,
       githubTokenInput,
       saveButton,
-      statusDiv
+      statusDiv,
+      githubTokenStatusDiv
     }, true); // isPopup = true
 
     // Open full options page

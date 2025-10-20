@@ -1,6 +1,6 @@
 import browser from 'webextension-polyfill';
 import { STORAGE_KEYS, TIMING, MESSAGES, LOG_PREFIX } from './constants';
-import { maskApiKey, maskGithubToken } from './utils';
+import { maskApiKey, maskGithubToken, checkGitHubToken } from './utils';
 
 interface SettingsFormElements {
   apiKeyInput: HTMLInputElement;
@@ -8,10 +8,11 @@ interface SettingsFormElements {
   saveButton: HTMLButtonElement;
   statusDiv: HTMLDivElement;
   clearCacheButton?: HTMLButtonElement;
+  githubTokenStatusDiv?: HTMLDivElement;
 }
 
 export function initializeSettingsForm(elements: SettingsFormElements, isPopup: boolean = false) {
-  const { apiKeyInput, githubTokenInput, saveButton, statusDiv, clearCacheButton } = elements;
+  const { apiKeyInput, githubTokenInput, saveButton, statusDiv, clearCacheButton, githubTokenStatusDiv } = elements;
 
   // Store full values for popup mode (to show when toggling visibility)
   let fullApiKey: string | null = null;
@@ -19,6 +20,23 @@ export function initializeSettingsForm(elements: SettingsFormElements, isPopup: 
 
   // Setup toggle visibility buttons
   setupToggleVisibility();
+
+  // Check token on input change (debounced)
+  let tokenCheckTimeout: NodeJS.Timeout | null = null;
+  githubTokenInput.addEventListener('input', () => {
+    if (tokenCheckTimeout) {
+      clearTimeout(tokenCheckTimeout);
+    }
+    // Debounce token check by 1 second
+    tokenCheckTimeout = setTimeout(() => {
+      const token = githubTokenInput.value.trim();
+      if (token && !token.includes('...')) {
+        checkAndDisplayTokenStatus(token);
+      } else if (githubTokenStatusDiv) {
+        githubTokenStatusDiv.style.display = 'none';
+      }
+    }, 1000);
+  });
 
   // Load saved settings
   loadSettings();
@@ -50,10 +68,45 @@ export function initializeSettingsForm(elements: SettingsFormElements, isPopup: 
         } else {
           githubTokenInput.value = fullGithubToken;
         }
+        // Check token validity and expiration
+        checkAndDisplayTokenStatus(fullGithubToken);
       }
     } catch (error) {
       console.error(`${LOG_PREFIX} Failed to load settings:`, error);
       showStatus('Failed to load settings', 'error');
+    }
+  }
+
+  async function checkAndDisplayTokenStatus(token: string) {
+    if (!githubTokenStatusDiv || !token) return;
+
+    githubTokenStatusDiv.textContent = 'Checking token...';
+    githubTokenStatusDiv.style.display = 'block';
+
+    const tokenInfo = await checkGitHubToken(token);
+
+    if (!tokenInfo.valid) {
+      githubTokenStatusDiv.textContent = `⚠️ ${tokenInfo.error || 'Invalid token'}`;
+      githubTokenStatusDiv.style.color = '#ef4444';
+    } else if (tokenInfo.expiresAt) {
+      const expiresDate = new Date(tokenInfo.expiresAt);
+      const now = new Date();
+      const daysUntilExpiry = Math.floor((expiresDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysUntilExpiry < 0) {
+        githubTokenStatusDiv.textContent = '⚠️ Token expired';
+        githubTokenStatusDiv.style.color = '#ef4444';
+      } else if (daysUntilExpiry < 7) {
+        githubTokenStatusDiv.textContent = `⚠️ Expires in ${daysUntilExpiry} day${daysUntilExpiry !== 1 ? 's' : ''}`;
+        githubTokenStatusDiv.style.color = '#f59e0b';
+      } else {
+        githubTokenStatusDiv.textContent = `✓ Valid, expires ${expiresDate.toLocaleDateString()}`;
+        githubTokenStatusDiv.style.color = '#10b981';
+      }
+    } else {
+      // No expiration (classic token without expiration set)
+      githubTokenStatusDiv.textContent = '✓ Valid token (no expiration)';
+      githubTokenStatusDiv.style.color = '#10b981';
     }
   }
 
