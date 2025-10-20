@@ -11,6 +11,10 @@ interface SettingsFormElements {
 export function initializeSettingsForm(elements: SettingsFormElements, isPopup: boolean = false) {
   const { apiKeyInput, githubTokenInput, saveButton, statusDiv, clearCacheButton } = elements;
 
+  // Store full values for popup mode (to show when toggling visibility)
+  let fullApiKey: string | null = null;
+  let fullGithubToken: string | null = null;
+
   // Setup toggle visibility buttons
   setupToggleVisibility();
 
@@ -21,24 +25,24 @@ export function initializeSettingsForm(elements: SettingsFormElements, isPopup: 
     const result = await browser.storage.sync.get(['anthropicApiKey', 'githubToken']);
     
     if (result.anthropicApiKey) {
+      fullApiKey = result.anthropicApiKey as string;
       if (isPopup) {
         // Show masked version in popup
-        const key = result.anthropicApiKey as string;
-        apiKeyInput.value = key.substring(0, 10) + '...' + key.substring(key.length - 4);
+        apiKeyInput.value = fullApiKey.substring(0, 10) + '...' + fullApiKey.substring(fullApiKey.length - 4);
         apiKeyInput.placeholder = 'Configured';
       } else {
-        apiKeyInput.value = result.anthropicApiKey;
+        apiKeyInput.value = fullApiKey;
       }
     }
     
     if (result.githubToken) {
+      fullGithubToken = result.githubToken as string;
       if (isPopup) {
         // Show masked version in popup
-        const token = result.githubToken as string;
-        githubTokenInput.value = token.substring(0, 8) + '...' + token.substring(token.length - 4);
+        githubTokenInput.value = fullGithubToken.substring(0, 8) + '...' + fullGithubToken.substring(fullGithubToken.length - 4);
         githubTokenInput.placeholder = 'Configured';
       } else {
-        githubTokenInput.value = result.githubToken;
+        githubTokenInput.value = fullGithubToken;
       }
     }
   }
@@ -116,11 +120,29 @@ export function initializeSettingsForm(elements: SettingsFormElements, isPopup: 
           // Show slash, hide eye parts
           eyeOpen.forEach(el => (el as SVGElement).style.display = 'none');
           if (eyeClosed) eyeClosed.style.display = 'block';
+          
+          // In popup mode, show full value when revealing
+          if (isPopup) {
+            if (targetId === 'apiKey' && fullApiKey) {
+              input.value = fullApiKey;
+            } else if (targetId === 'githubToken' && fullGithubToken) {
+              input.value = fullGithubToken;
+            }
+          }
         } else {
           input.type = 'password';
           // Hide slash, show eye parts
           eyeOpen.forEach(el => (el as SVGElement).style.display = 'block');
           if (eyeClosed) eyeClosed.style.display = 'none';
+          
+          // In popup mode, show masked value when hiding
+          if (isPopup) {
+            if (targetId === 'apiKey' && fullApiKey) {
+              input.value = fullApiKey.substring(0, 10) + '...' + fullApiKey.substring(fullApiKey.length - 4);
+            } else if (targetId === 'githubToken' && fullGithubToken) {
+              input.value = fullGithubToken.substring(0, 8) + '...' + fullGithubToken.substring(fullGithubToken.length - 4);
+            }
+          }
         }
       });
     });
