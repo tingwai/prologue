@@ -170,20 +170,20 @@
   </style>
 </head>
 <body>
-  <h2>🤖 PR Context Assistant</h2>
-  <p>AI-powered code explanations for GitHub PRs using Claude</p>
+  <h2>🤖 Prologue</h2>
+  <p>AI-powered code explanations for GitHub PRs</p>
 
   <div class="form-group">
-    <label for="apiKey">Anthropic API Key</label>
+    <label for="anthropicApiKey">Anthropic API Key (Optional)</label>
     <div class="input-wrapper">
       <input
         type="password"
-        id="apiKey"
+        id="anthropicApiKey"
         placeholder="sk-ant-xxxxxxxxxxxxxxxxxxxx"
         aria-label="Anthropic API Key"
-        aria-describedby="apiKeyHelp"
+        aria-describedby="anthropicApiKeyHelp"
       >
-      <button type="button" class="toggle-visibility" data-target="apiKey" title="Toggle visibility" aria-label="Toggle API key visibility">
+      <button type="button" class="toggle-visibility" data-target="anthropicApiKey" title="Toggle visibility" aria-label="Toggle API key visibility">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
           <circle class="eye-open" cx="12" cy="12" r="3"></circle>
@@ -191,8 +191,31 @@
         </svg>
       </button>
     </div>
-    <div class="help-text" id="apiKeyHelp">
+    <div class="help-text" id="anthropicApiKeyHelp">
       Get from <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label for="openaiApiKey">OpenAI API Key (Optional)</label>
+    <div class="input-wrapper">
+      <input
+        type="password"
+        id="openaiApiKey"
+        placeholder="sk-xxxxxxxxxxxxxxxxxxxx"
+        aria-label="OpenAI API Key"
+        aria-describedby="openaiApiKeyHelp"
+      >
+      <button type="button" class="toggle-visibility" data-target="openaiApiKey" title="Toggle visibility" aria-label="Toggle API key visibility">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle class="eye-open" cx="12" cy="12" r="3"></circle>
+          <line class="eye-closed" style="display:none" x1="1" y1="1" x2="23" y2="23"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="help-text" id="openaiApiKeyHelp">
+      Get from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">platform.openai.com</a>. Enter either this or an Anthropic key.
     </div>
   </div>
 

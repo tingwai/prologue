@@ -3,7 +3,8 @@ import { STORAGE_KEYS, TIMING, MESSAGES, LOG_PREFIX } from './constants';
 import { maskApiKey, maskGithubToken, checkGitHubToken } from './utils';
 
 interface SettingsFormElements {
-  apiKeyInput: HTMLInputElement;
+  anthropicApiKeyInput: HTMLInputElement;
+  openaiApiKeyInput: HTMLInputElement;
   githubTokenInput: HTMLInputElement;
   saveButton: HTMLButtonElement;
   statusDiv: HTMLDivElement;
@@ -12,10 +13,11 @@ interface SettingsFormElements {
 }
 
 export function initializeSettingsForm(elements: SettingsFormElements, isPopup: boolean = false) {
-  const { apiKeyInput, githubTokenInput, saveButton, statusDiv, clearCacheButton, githubTokenStatusDiv } = elements;
+  const { anthropicApiKeyInput, openaiApiKeyInput, githubTokenInput, saveButton, statusDiv, clearCacheButton, githubTokenStatusDiv } = elements;
 
   // Store full values for popup mode (to show when toggling visibility)
-  let fullApiKey: string | null = null;
+  let fullAnthropicApiKey: string | null = null;
+  let fullOpenAIApiKey: string | null = null;
   let fullGithubToken: string | null = null;
 
   // Setup toggle visibility buttons
@@ -45,17 +47,28 @@ export function initializeSettingsForm(elements: SettingsFormElements, isPopup: 
     try {
       const result = await browser.storage.sync.get([
         STORAGE_KEYS.ANTHROPIC_API_KEY,
+        STORAGE_KEYS.OPENAI_API_KEY,
         STORAGE_KEYS.GITHUB_TOKEN
       ]);
 
       if (result[STORAGE_KEYS.ANTHROPIC_API_KEY]) {
-        fullApiKey = result[STORAGE_KEYS.ANTHROPIC_API_KEY] as string;
+        fullAnthropicApiKey = result[STORAGE_KEYS.ANTHROPIC_API_KEY] as string;
         if (isPopup) {
           // Show masked version in popup
-          apiKeyInput.value = maskApiKey(fullApiKey);
-          apiKeyInput.placeholder = MESSAGES.PLACEHOLDERS.API_KEY_CONFIGURED;
+          anthropicApiKeyInput.value = maskApiKey(fullAnthropicApiKey);
+          anthropicApiKeyInput.placeholder = MESSAGES.PLACEHOLDERS.API_KEY_CONFIGURED;
         } else {
-          apiKeyInput.value = fullApiKey;
+          anthropicApiKeyInput.value = fullAnthropicApiKey;
+        }
+      }
+
+      if (result[STORAGE_KEYS.OPENAI_API_KEY]) {
+        fullOpenAIApiKey = result[STORAGE_KEYS.OPENAI_API_KEY] as string;
+        if (isPopup) {
+          openaiApiKeyInput.value = maskApiKey(fullOpenAIApiKey);
+          openaiApiKeyInput.placeholder = MESSAGES.PLACEHOLDERS.API_KEY_CONFIGURED;
+        } else {
+          openaiApiKeyInput.value = fullOpenAIApiKey;
         }
       }
 
@@ -113,32 +126,40 @@ export function initializeSettingsForm(elements: SettingsFormElements, isPopup: 
   // Save settings
   saveButton.addEventListener('click', async () => {
     try {
-      const apiKey = apiKeyInput.value.trim();
+      const enteredAnthropicApiKey = anthropicApiKeyInput.value.trim();
+      const enteredOpenAIApiKey = openaiApiKeyInput.value.trim();
       const githubToken = githubTokenInput.value.trim();
+      const anthropicApiKey = isPopup && enteredAnthropicApiKey.includes('...')
+        ? fullAnthropicApiKey || ''
+        : enteredAnthropicApiKey;
+      const openaiApiKey = isPopup && enteredOpenAIApiKey.includes('...')
+        ? fullOpenAIApiKey || ''
+        : enteredOpenAIApiKey;
 
-      if (!apiKey) {
+      if (!anthropicApiKey && !openaiApiKey) {
         showStatus(MESSAGES.ERRORS.NO_API_KEY_WARNING, 'error');
         return;
       }
 
-      // Don't save if it's the masked version (popup only)
-      if (isPopup && apiKey.includes('...')) {
-        showStatus(MESSAGES.SUCCESS.SETTINGS_CONFIGURED, 'success');
-        return;
-      }
-
       await browser.storage.sync.set({
-        [STORAGE_KEYS.ANTHROPIC_API_KEY]: apiKey,
+        [STORAGE_KEYS.ANTHROPIC_API_KEY]: anthropicApiKey || null,
+        [STORAGE_KEYS.OPENAI_API_KEY]: openaiApiKey || null,
         [STORAGE_KEYS.GITHUB_TOKEN]: githubToken || null
       });
 
       showStatus(MESSAGES.SUCCESS.SETTINGS_SAVED, 'success');
 
+      fullAnthropicApiKey = anthropicApiKey || null;
+      fullOpenAIApiKey = openaiApiKey || null;
+
       // Mask the values after saving in popup
       if (isPopup) {
         setTimeout(() => {
-          if (apiKey) {
-            apiKeyInput.value = maskApiKey(apiKey);
+          if (anthropicApiKey) {
+            anthropicApiKeyInput.value = maskApiKey(anthropicApiKey);
+          }
+          if (openaiApiKey) {
+            openaiApiKeyInput.value = maskApiKey(openaiApiKey);
           }
           if (githubToken) {
             githubTokenInput.value = maskGithubToken(githubToken);
@@ -196,8 +217,10 @@ export function initializeSettingsForm(elements: SettingsFormElements, isPopup: 
           
           // In popup mode, show full value when revealing
           if (isPopup) {
-            if (targetId === 'apiKey' && fullApiKey) {
-              input.value = fullApiKey;
+            if (targetId === 'anthropicApiKey' && fullAnthropicApiKey) {
+              input.value = fullAnthropicApiKey;
+            } else if (targetId === 'openaiApiKey' && fullOpenAIApiKey) {
+              input.value = fullOpenAIApiKey;
             } else if (targetId === 'githubToken' && fullGithubToken) {
               input.value = fullGithubToken;
             }
@@ -210,8 +233,10 @@ export function initializeSettingsForm(elements: SettingsFormElements, isPopup: 
 
           // In popup mode, show masked value when hiding
           if (isPopup) {
-            if (targetId === 'apiKey' && fullApiKey) {
-              input.value = maskApiKey(fullApiKey);
+            if (targetId === 'anthropicApiKey' && fullAnthropicApiKey) {
+              input.value = maskApiKey(fullAnthropicApiKey);
+            } else if (targetId === 'openaiApiKey' && fullOpenAIApiKey) {
+              input.value = maskApiKey(fullOpenAIApiKey);
             } else if (targetId === 'githubToken' && fullGithubToken) {
               input.value = maskGithubToken(fullGithubToken);
             }

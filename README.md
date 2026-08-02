@@ -136,13 +136,13 @@ npm run clean
 **"PR context not loaded" message:**
 - Refresh the page and wait 2-3 seconds
 - Check that you have a valid Anthropic API key configured
-- Open browser console (F12) and look for `[PR Context Assistant]` logs
+- Open browser console (F12) and look for `[Prologue]` logs
 - For private repos, ensure GitHub token is configured
 
 **Tooltip not appearing:**
 - Select at least **5 characters** of code
 - Selection must be in diff areas (`.blob-code`, `.file`, etc.)
-- Check console for `[PR Context Assistant] isCodeArea: false` logs
+- Check console for `[Prologue] isCodeArea: false` logs
 
 **"Failed to fetch diff" errors:**
 - **404 error without token**: Repository is private, add GitHub token

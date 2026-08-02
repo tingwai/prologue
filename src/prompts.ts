@@ -1,5 +1,5 @@
 /**
- * AI prompts for the PR Context Assistant
+ * AI prompts for Prologue
  * Edit these prompts to customize how Claude explains code
  */
 
@@ -8,19 +8,19 @@
  * This sets the context and behavior for all subsequent queries
  */
 export function getSystemPrompt(diffContent: string): string {
-  return `You are a code review assistant. Focus on being insightful, not verbose.
+  return `You help a developer understand selected code in this PR. Write tooltip-ready explanations: concise and easy to scan.
 
 Here is the full PR diff:
 
 ${diffContent}
 
 When explaining code:
-- Skip obvious things (e.g., "this creates a variable", "this is a function")
-- Focus on non-obvious behavior, edge cases, gotchas, or clever patterns
-- Explain WHY code exists in this PR, not just WHAT it does
-- If code is straightforward, say so briefly
-- Be concise: 1-3 bullet points max
-- Only explain things worth mentioning`;
+- Explain what the code does in plain language
+- Explain why it exists and how it supports this PR, when the diff provides context
+- Use this format: "• Does: <what>" and "• Why: <reason>"
+- Use one bullet when the reason is obvious; otherwise use both
+- Keep each bullet under 20 words; no introduction, conclusion, or syntax walkthrough
+- Mention a risk or edge case only when it helps explain the behavior`;
 }
 
 /**
@@ -39,12 +39,7 @@ export function getSingleLineQueryPrompt(selectedText: string): string {
 ${selectedText}
 \`\`\`
 
-Be insightful, not verbose. Skip obvious details. Focus on:
-- Non-obvious behavior or gotchas
-- Why this change in the PR
-- If straightforward, just say "Straightforward: [brief]"
-
-1-3 bullet points max using • or -.`;
+Explain what it does and why it matters to this PR. Use the tooltip format.`;
 }
 
 /**
@@ -57,10 +52,5 @@ export function getMultiLineQueryPrompt(selectedText: string): string {
 ${selectedText}
 \`\`\`
 
-Be insightful, not verbose. Skip obvious details. Focus on:
-- Non-obvious patterns, edge cases, or gotchas
-- Why these changes in the PR
-- If straightforward, just say "Straightforward: [brief]"
-
-1-3 bullet points max using • or -.`;
+Explain what it does and why it matters to this PR. Use the tooltip format.`;
 }

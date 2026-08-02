@@ -47,16 +47,17 @@ export const GITHUB_SELECTORS = {
 export const API = {
   ANTHROPIC_VERSION: '2023-06-01',
   CLAUDE_MODEL: 'claude-sonnet-4-5-20250929',
+  OPENAI_MODEL: 'gpt-4.1-mini',
   MAX_TOKENS: 1024,
 } as const;
 
 // Messages and prompts
 export const MESSAGES = {
   ERRORS: {
-    NO_API_KEY: '⚠️ No API key configured. Go to extension options.',
+    NO_API_KEY: '⚠️ No AI API key configured. Go to extension options.',
     PR_CONTEXT_NOT_LOADED: '⚠️ PR context not loaded. Please refresh the page.',
     QUERY_FAILED: '❌ Failed to get explanation. Try again.',
-    NO_API_KEY_WARNING: 'Please enter an API key',
+    NO_API_KEY_WARNING: 'Please enter an Anthropic or OpenAI API key',
     PRIVATE_REPO_ERROR: 'Failed to fetch diff: Repository may be private. Please add a GitHub token in extension options.',
   },
   SUCCESS: {
@@ -68,7 +69,8 @@ export const MESSAGES = {
     THINKING: 'Thinking...',
   },
   PLACEHOLDERS: {
-    API_KEY: 'sk-ant-xxxxxxxxxxxxxxxxxxxx',
+    ANTHROPIC_API_KEY: 'sk-ant-xxxxxxxxxxxxxxxxxxxx',
+    OPENAI_API_KEY: 'sk-xxxxxxxxxxxxxxxxxxxx',
     GITHUB_TOKEN: 'ghp_xxxxxxxxxxxxxxxxxxxx',
     API_KEY_CONFIGURED: 'Configured',
   },
@@ -77,8 +79,9 @@ export const MESSAGES = {
 // Storage keys
 export const STORAGE_KEYS = {
   ANTHROPIC_API_KEY: 'anthropicApiKey',
+  OPENAI_API_KEY: 'openaiApiKey',
   GITHUB_TOKEN: 'githubToken',
 } as const;
 
 // Console log prefix
-export const LOG_PREFIX = '[PR Context Assistant]';
+export const LOG_PREFIX = '[Prologue]';

@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "name": "PR Context Assistant",
+  "name": "Prologue",
   "version": "1.0.0",
   "description": "AI-powered GitHub PR context and code explanations",
   "permissions": [
@@ -9,7 +9,8 @@
     "https://github.com/*",
     "https://api.github.com/*",
     "https://patch-diff.githubusercontent.com/*",
-    "https://api.anthropic.com/*"
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*"
   ],
   "background": {
     "scripts": ["background.js"]
@@ -28,7 +29,7 @@
   },
   "browser_action": {
     "default_popup": "popup.html",
-    "default_title": "PR Context Assistant"
+    "default_title": "Prologue"
   },
   "icons": {
     "16": "icon16.png",
@@ -37,7 +38,7 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "pr-context-assistant@continue.dev",
+      "id": "prologue@tingwai.dev",
       "strict_min_version": "109.0"
     }
   }

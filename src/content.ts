@@ -3,6 +3,13 @@ import type { PRContext, TooltipPosition, ConversationMessage } from './types';
 import { TIMING, UI, GITHUB_SELECTORS, API, MESSAGES, STORAGE_KEYS, LOG_PREFIX } from './constants';
 import { getSystemPrompt, ASSISTANT_ACKNOWLEDGMENT, getSingleLineQueryPrompt, getMultiLineQueryPrompt } from './prompts';
 
+type AIProvider = 'anthropic' | 'openai';
+
+interface AIProviderConfig {
+  provider: AIProvider;
+  apiKey: string;
+}
+
 class PRContextAssistant {
   private tooltip: HTMLElement | null = null;
   private prContext: PRContext | null = null;
@@ -56,8 +63,7 @@ class PRContextAssistant {
       return;
     }
 
-    const apiKey = await this.getApiKey();
-    if (!apiKey) {
+    if (!await this.getAIProviderConfig()) {
       return;
     }
 
@@ -65,7 +71,7 @@ class PRContextAssistant {
       // Extract PR info to get diff URL
       const prInfo = this.extractPRInfo(prUrl);
       if (!prInfo) {
-        console.error('[PR Context Assistant] Could not extract PR info');
+        console.error('[Prologue] Could not extract PR info');
         return;
       }
 
@@ -78,7 +84,7 @@ class PRContextAssistant {
       if (githubToken) {
         // Use GitHub API for authenticated requests (works for private repos)
         const apiUrl = `https://api.github.com/repos/${prInfo.owner}/${prInfo.repo}/pulls/${prInfo.number}`;
-        console.log('[PR Context Assistant] Fetching PR via GitHub API:', apiUrl);
+        console.log('[Prologue] Fetching PR via GitHub API:', apiUrl);
 
         const apiResponse = await fetch(apiUrl, {
           headers: {
@@ -88,11 +94,11 @@ class PRContextAssistant {
           }
         });
 
-        console.log('[PR Context Assistant] GitHub API response status:', apiResponse.status, apiResponse.statusText);
+        console.log('[Prologue] GitHub API response status:', apiResponse.status, apiResponse.statusText);
 
         if (!apiResponse.ok) {
           const responseText = await apiResponse.text();
-          console.error('[PR Context Assistant] GitHub API fetch failed:', {
+          console.error('[Prologue] GitHub API fetch failed:', {
             status: apiResponse.status,
             statusText: apiResponse.statusText,
             responseBody: responseText.substring(0, 500)
@@ -101,18 +107,18 @@ class PRContextAssistant {
         }
 
         diffContent = await apiResponse.text();
-        console.log('[PR Context Assistant] Diff fetched via GitHub API, length:', diffContent.length);
+        console.log('[Prologue] Diff fetched via GitHub API, length:', diffContent.length);
       } else {
         // Use patch-diff service for public repos (no auth needed)
         const diffUrl = `https://patch-diff.githubusercontent.com/raw/${prInfo.owner}/${prInfo.repo}/pull/${prInfo.number}.diff`;
-        console.log('[PR Context Assistant] Fetching diff from patch-diff:', diffUrl);
+        console.log('[Prologue] Fetching diff from patch-diff:', diffUrl);
 
         const diffResponse = await fetch(diffUrl);
-        console.log('[PR Context Assistant] Patch-diff response status:', diffResponse.status, diffResponse.statusText);
+        console.log('[Prologue] Patch-diff response status:', diffResponse.status, diffResponse.statusText);
 
         if (!diffResponse.ok) {
           const responseText = await diffResponse.text();
-          console.error('[PR Context Assistant] Patch-diff fetch failed:', {
+          console.error('[Prologue] Patch-diff fetch failed:', {
             status: diffResponse.status,
             statusText: diffResponse.statusText,
             responseBody: responseText.substring(0, 500)
@@ -125,7 +131,7 @@ class PRContextAssistant {
         }
 
         diffContent = await diffResponse.text();
-        console.log('[PR Context Assistant] Diff fetched from patch-diff, length:', diffContent.length);
+        console.log('[Prologue] Diff fetched from patch-diff, length:', diffContent.length);
       }
 
       // Initialize conversation with Claude
@@ -145,9 +151,9 @@ class PRContextAssistant {
 
       // Cache the context
       await browser.storage.local.set({ [cacheKey]: this.prContext });
-      console.log('[PR Context Assistant] PR context loaded and cached');
+      console.log('[Prologue] PR context loaded and cached');
     } catch (error) {
-      console.error('[PR Context Assistant] Failed to initialize:', error);
+      console.error('[Prologue] Failed to initialize:', error);
     }
   }
 
@@ -176,9 +182,23 @@ class PRContextAssistant {
 
 
 
-  private async getApiKey(): Promise<string | null> {
-    const result = await browser.storage.sync.get(STORAGE_KEYS.ANTHROPIC_API_KEY);
-    return result[STORAGE_KEYS.ANTHROPIC_API_KEY] || null;
+  private async getAIProviderConfig(): Promise<AIProviderConfig | null> {
+    const result = await browser.storage.sync.get([
+      STORAGE_KEYS.ANTHROPIC_API_KEY,
+      STORAGE_KEYS.OPENAI_API_KEY,
+    ]);
+
+    const anthropicApiKey = result[STORAGE_KEYS.ANTHROPIC_API_KEY] as string | undefined;
+    if (anthropicApiKey) {
+      return { provider: 'anthropic', apiKey: anthropicApiKey };
+    }
+
+    const openaiApiKey = result[STORAGE_KEYS.OPENAI_API_KEY] as string | undefined;
+    if (openaiApiKey) {
+      return { provider: 'openai', apiKey: openaiApiKey };
+    }
+
+    return null;
   }
 
   private async getGithubToken(): Promise<string | null> {
@@ -266,17 +286,22 @@ class PRContextAssistant {
     const signal = this.activeAbortController.signal;
 
     try {
-      const apiKey = await this.getApiKey();
-      if (!apiKey) {
+      const providerConfig = await this.getAIProviderConfig();
+      if (!providerConfig) {
         this.showTooltip(MESSAGES.ERRORS.NO_API_KEY, position, true);
         return;
       }
 
-      const explanation = await this.queryAgent(selectedText, apiKey, signal);
+      let streamedExplanation = '';
+      const explanation = await this.queryAgent(selectedText, providerConfig, signal, (textDelta) => {
+        streamedExplanation += textDelta;
+        if (!signal.aborted) {
+          this.updateTooltipContent(streamedExplanation, false);
+        }
+      });
 
-      // Only show tooltip if request wasn't aborted
       if (!signal.aborted) {
-        this.showTooltip(explanation, position, true);
+        this.updateTooltipContent(explanation || streamedExplanation, true);
       }
     } catch (error: any) {
       // Don't show error if request was intentionally aborted
@@ -293,7 +318,12 @@ class PRContextAssistant {
     }
   }
 
-  private async queryAgent(selectedText: string, apiKey: string, signal: AbortSignal): Promise<string> {
+  private async queryAgent(
+    selectedText: string,
+    providerConfig: AIProviderConfig,
+    signal: AbortSignal,
+    onTextDelta: (text: string) => void,
+  ): Promise<string> {
     // Count lines in selection
     const lineCount = selectedText.split('\n').length;
     const isSingleLine = lineCount === 1;
@@ -308,6 +338,19 @@ class PRContextAssistant {
     const baseHistory = this.conversationHistory.slice(0, 2);
     const messages = [...baseHistory, { role: 'user' as const, content: queryPrompt }];
 
+    if (providerConfig.provider === 'openai') {
+      return this.queryOpenAI(messages, providerConfig.apiKey, signal, onTextDelta);
+    }
+
+    return this.queryAnthropic(messages, providerConfig.apiKey, signal, onTextDelta);
+  }
+
+  private async queryAnthropic(
+    messages: ConversationMessage[],
+    apiKey: string,
+    signal: AbortSignal,
+    onTextDelta: (text: string) => void,
+  ): Promise<string> {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -318,7 +361,8 @@ class PRContextAssistant {
       body: JSON.stringify({
         model: API.CLAUDE_MODEL,
         max_tokens: API.MAX_TOKENS,
-        messages: messages,
+        messages,
+        stream: true,
       }),
       signal: signal, // Add abort signal to fetch
     });
@@ -329,13 +373,95 @@ class PRContextAssistant {
       throw new Error(`Claude API failed: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
-    const assistantMessage = data.content[0]?.text || 'No explanation available.';
+    let explanation = '';
+    await this.consumeEventStream(response, (eventData) => {
+      const event = JSON.parse(eventData);
+      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+        const text = event.delta.text || '';
+        explanation += text;
+        onTextDelta(text);
+      }
+    });
 
-    // Don't update conversation history - keep it at just the first 2 messages
-    // Each new selection just replaces the query, doesn't append
+    return explanation || 'No explanation available.';
+  }
 
-    return assistantMessage;
+  private async queryOpenAI(
+    messages: ConversationMessage[],
+    apiKey: string,
+    signal: AbortSignal,
+    onTextDelta: (text: string) => void,
+  ): Promise<string> {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: API.OPENAI_MODEL,
+        max_tokens: API.MAX_TOKENS,
+        messages,
+        stream: true,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`${LOG_PREFIX} OpenAI API error:`, response.status, errorText);
+      throw new Error(`OpenAI API failed: ${response.status} ${response.statusText}`);
+    }
+
+    let explanation = '';
+    await this.consumeEventStream(response, (eventData) => {
+      if (eventData === '[DONE]') {
+        return;
+      }
+
+      const event = JSON.parse(eventData);
+      const text = event.choices[0]?.delta?.content || '';
+      explanation += text;
+      onTextDelta(text);
+    });
+
+    return explanation || 'No explanation available.';
+  }
+
+  private async consumeEventStream(response: Response, onEvent: (eventData: string) => void): Promise<void> {
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('API response did not include a readable stream');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const consumeBufferedEvents = (isComplete: boolean = false) => {
+      const events = buffer.split(/\r?\n\r?\n/);
+      buffer = isComplete ? '' : events.pop() || '';
+
+      for (const event of events) {
+        const eventData = event
+          .split(/\r?\n/)
+          .filter(line => line.startsWith('data:'))
+          .map(line => line.slice('data:'.length).trimStart())
+          .join('\n');
+
+        if (eventData) {
+          onEvent(eventData);
+        }
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      consumeBufferedEvents(done);
+
+      if (done) {
+        return;
+      }
+    }
   }
 
   private showTooltip(content: string, position: TooltipPosition, allowCopy: boolean) {
@@ -389,6 +515,35 @@ class PRContextAssistant {
           if (copyBtn) copyBtn.textContent = '📋';
         }, TIMING.COPY_FEEDBACK_DURATION);
       });
+    }
+  }
+
+  private updateTooltipContent(content: string, allowCopy: boolean) {
+    if (!this.tooltip) {
+      return;
+    }
+
+    const contentElement = this.tooltip.querySelector('.pr-context-tooltip-content');
+    if (contentElement) {
+      contentElement.innerHTML = this.formatContent(content);
+    }
+
+    const copyButton = this.tooltip.querySelector('.pr-context-copy-btn');
+    if (allowCopy && !copyButton) {
+      const newCopyButton = document.createElement('button');
+      newCopyButton.className = 'pr-context-copy-btn';
+      newCopyButton.title = 'Copy';
+      newCopyButton.textContent = '📋';
+      newCopyButton.addEventListener('click', () => {
+        navigator.clipboard.writeText(content);
+        newCopyButton.textContent = '✓';
+        setTimeout(() => {
+          newCopyButton.textContent = '📋';
+        }, TIMING.COPY_FEEDBACK_DURATION);
+      });
+      this.tooltip.querySelector('.pr-context-close-btn')?.before(newCopyButton);
+    } else if (!allowCopy && copyButton) {
+      copyButton.remove();
     }
   }
 

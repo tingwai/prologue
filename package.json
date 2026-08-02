@@ -1,5 +1,5 @@
 {
-  "name": "pr-context-assistant",
+  "name": "prologue",
   "version": "1.0.0",
   "description": "AI-powered Chrome/Firefox extension for GitHub PR context and explanations",
   "scripts": {
